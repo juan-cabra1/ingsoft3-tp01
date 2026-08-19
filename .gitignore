@@ -1,0 +1,16 @@
+# dependencias y artefactos de build
+node_modules/
+bin/
+obj/
+dist/
+build/
+
+# secretos: NUNCA se versionan
+.env
+*.local
+
+# basura del sistema operativo y del editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
