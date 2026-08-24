@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /bako-gestion
+
+Sitemap: https://bakolifestyle.com/sitemap.xml

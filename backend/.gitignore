@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+
+# Virtual Environment
+venv/
+.venv
+
+# Environment Variables
+.env
+
+# Uploads
+uploads/

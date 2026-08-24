@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pymysql
+pydantic-settings
+python-jose[cryptography]
+bcrypt
+python-multipart
+slowapi
+sentry-sdk[fastapi]
+cloudinary
