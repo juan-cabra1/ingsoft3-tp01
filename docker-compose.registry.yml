@@ -1,0 +1,34 @@
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: bako_store
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    image: ghcr.io/juan-cabra1/backend:v0.1.0
+    environment:
+      DATABASE_URL: "mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/bako_store"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      WHATSAPP_NUMBER: ${WHATSAPP_NUMBER}
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: ghcr.io/juan-cabra1/frontend:v0.1.0
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
