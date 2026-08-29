@@ -1,6 +1,6 @@
 # Proyecto IngSoft3
 
-Bako Lifestyle Store — API (FastAPI) + Frontend (React/Vite servido con Nginx) + MySQL, todo orquestado con Docker Compose.
+E-commerce Bako Lifestyle — API (FastAPI) + Frontend (React/Vite servido con Nginx) + MySQL, todo orquestado con Docker Compose.
 
 ## Requisitos previos
 
