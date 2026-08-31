@@ -68,3 +68,25 @@ Decisiones de contenerizacion
 - para diagnosticar por que el backend no se conectaba a la base dentro del compose (connection refused) aunque la base estaba sana. Se verifico con un contenedor de prueba conectandose directo a db:3306, lo que confirmo que el problema era el puerto equivocado en mi propio DATABASE_URL.
 - Para revisar mi docker-compose.yml antes de correrlo. Encontro tres errores (healthcheck, variables obligatorias faltantes, build arg faltante). Lo verifique yo mismo confirmando en mi propio config.py que esos campos no tienen valor por default.
 - Para entender conceptos que no tenia claros (la flag -m de python, la diferencia entre CMD y CMD-SHELL, por que no hace falta venv dentro de un contenedor, la diferencia entre build args y variables de entorno). Los fui verificando probando cada cosa en mi propia terminal despues de cada explicacion.
+
+# TP3 - Planificacion - DevOps
+
+## 1. Duracion del Sprint:
+- Para la duracion de los sprints elegi como plazo 1 semana, esto porque cada semana tenemos TP nuevo, y con esa semana me alcanza (y a veces sobra tiempo) para terminar el trabajo.
+## 2. Limite de trabajo en progreso
+- El numero limite de trabajo en progreso puse 2 porque como soy el unico desarrollador dentro del proyecto como maximo es la cantidad de personas del equipo mas 1, para no tener mas tareas en progreso al mismo tiempo y seguir avanzando y terminando las tareas que suman al proyecto.
+## 3. Diagnostico de la historia mal escrita
+- La historia esta mal escrita por varios motivos: 1. No sigue el formato de una HU, Como (rol) quiero (accion) para (beneficio/valor). En el "para" no explica ningun valor del negocio, no tiene que describir la implementacion sino justificar porque le importa a alguien. 2. Es una tarea no una historia, es un cómo, osea una decision de implementacion, no un qué necesita el negocio. Deberia ser una subtarea dentro de la historia real. 3. No aporta contexto del negocio ni tampoco tiene criterios de aceptacion.
+Como la reescribiria:
+COMO visitante del sitio
+QUIERO registrarme con mi email y contraseña
+PARA poder acceder a las funcionalidades exclusivas de usuarios registrados
+
+Criterios de aceptación:
+- El sistema valida que el email no esté ya registrado
+- La contraseña se almacena hasteada, nunca en texto plano
+- Tras el registro exitoso, el usuario recibe confirmación y queda autenticado
+## 4. Problemas que hubo y como los resolviste
+- No hubo problemas que resolver
+## 5. Declaracion de uso de la IA
+- Me ayude con la IA para redactar como reescribi la historia de usuario. Verifique que sea correcta por las buenas practicas de una historia de usuario.
