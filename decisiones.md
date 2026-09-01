@@ -90,3 +90,20 @@ Criterios de aceptación:
 - No hubo problemas que resolver
 ## 5. Declaracion de uso de la IA
 - Me ayude con la IA para redactar como reescribi la historia de usuario. Verifique que sea correcta por las buenas practicas de una historia de usuario.
+
+# TP4 - CI: Pipelines as Code
+
+## 1. Estructura elegida del pipeline
+- Decidi separar el pipeline en dos jobs, build-backend y build-frontend, porque son dos imagenes independientes que no dependen entre si: no hace falta que una espere a la otra para saber si compila. Al correr en paralelo, en dos runners distintos al mismo tiempo, el CI tarda menos en darme el resultado sobre el PR, en vez de sumar el tiempo de las dos construcciones una atras de la otra.
+
+## 2. Que cachea el pipeline y que pasa si el cache desaparece
+- El cache reutiliza las capas que no cambian seguido: la imagen base (python:3.13-slim en el backend) y la instalacion de dependencias (requirements.txt con pip, package.json con npm en el frontend), porque el Dockerfile copia esos archivos antes que el codigo fuente. La capa que copia el codigo nunca se reutiliza a proposito, tiene que rehacerse en cada corrida para reflejar los cambios nuevos. Si GitHub borra el cache (puede pasar, tiene limite de tamaño y se desaloja cuando quiere), el pipeline no se rompe: reconstruye todas las capas de cero, tarda un poco mas, pero el resultado (que compile o no) es exactamente el mismo. El cache es solo una optimizacion de velocidad, nunca una dependencia funcional del pipeline.
+
+## 3. Por que el pipeline construye con el Dockerfile en vez de compilar por su cuenta
+- El pipeline construye con el mismo Dockerfile del TP2 en vez de correr pip install o npm run build directo en el YAML porque asi hay una sola definicion de build. Si el workflow compilara por su cuenta, tendria dos formas distintas de construir la misma app: la que usa el pipeline para verificar y la que usa el Dockerfile para desplegar despues. Esas dos definiciones tarde o temprano divergen (una version de dependencia distinta, un paso que se olvida actualizar en una sola), y terminaria verificando algo que no es exactamente lo que despues corre en produccion. Usando el Dockerfile como unica fuente de verdad, lo que el pipeline construye en el PR es literalmente lo mismo que se va a desplegar.
+
+## 4. Problemas encontrados y como los resolvi
+- Durante este TP encontre un problema real, aunque no fue en el pipeline en si sino en el README: despues de agregar el badge, al entrar a la web el archivo perdio todo el formato de Markdown. Revisando el diff con git aparecia "Binary files a/README.md and b/README.md differ", lo que significaba que Git estaba tratando el archivo como binario. La causa fue haber corrido un comando (echo '' >> README.md) en PowerShell en vez de en Git Bash: PowerShell escribe esa redireccion en una codificacion que inserta bytes nulos, y Git detecta cualquier archivo con un byte nulo como binario, asi que GitHub dejo de interpretar el Markdown. Lo solucione reescribiendo el archivo completo en UTF-8 puro sin bytes nulos, verificando con el comando file que el archivo pasara de decir "data" a "Unicode text, UTF-8 text", y confirmando que la cantidad de bytes 0x00 quedara en cero. Como leccion, evito usar echo con redireccion en PowerShell para tocar archivos de texto del repo, uso Git Bash o edito el archivo directamente.
+
+## 5. Declaracion de uso de IA
+- Use IA tambien para diagnosticar la corrupcion del README (bytes nulos por PowerShell). Verifique el diagnostico yo mismo revisando los bytes del archivo con xxd, corriendo el comando file antes y despues del fix, y confirmando el render correcto en GitHub.
