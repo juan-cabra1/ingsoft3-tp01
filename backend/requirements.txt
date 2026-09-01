@@ -9,3 +9,4 @@ python-multipart
 slowapi
 sentry-sdk[fastapi]
 cloudinary
+paquete-falso
