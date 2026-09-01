@@ -1,7 +1,26 @@
 name: CI
-on: [pull_request]
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
 jobs:
-  build:
+  build-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Qué estamos verificando
+        env:
+          RAMA: ${{ github.head_ref || github.ref_name }}
+        run: echo "Rama $RAMA · commit $GITHUB_SHA"
+
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Construir la imagen del backend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          push: false
+          tags: backend:ci
