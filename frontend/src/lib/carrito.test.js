@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { actualizarCantidad, agregarItem, calcularTotal } from './carrito';
+import {
+  actualizarCantidad,
+  agregarItem,
+  calcularCostoEnvio,
+  calcularDescuentoPorCantidad,
+  calcularTotal,
+  clasificarCliente,
+} from './carrito';
 
 describe('calcularTotal', () => {
   it('suma precio por cantidad de todos los items', () => {
@@ -58,5 +65,53 @@ describe('actualizarCantidad', () => {
       { id: 1, nombre: 'Gorra', precio: 1000, quantity: 5 },
       { id: 2, nombre: 'Remera', precio: 2000, quantity: 1 },
     ]);
+  });
+});
+
+describe('calcularDescuentoPorCantidad', () => {
+  const cartCon = (cantidadTotal) => [{ id: 1, precio: 1000, quantity: cantidadTotal }];
+
+  it.each([
+    [25, 0.2],
+    [20, 0.2],
+    [15, 0.15],
+    [10, 0.15],
+    [8, 0.1],
+    [6, 0.1],
+    [4, 0.05],
+    [3, 0.05],
+    [2, 0],
+    [0, 0],
+  ])('con %i unidades en el carrito, el descuento es %d', (cantidad, descuentoEsperado) => {
+    expect(calcularDescuentoPorCantidad(cartCon(cantidad))).toBe(descuentoEsperado);
+  });
+});
+
+describe('calcularCostoEnvio', () => {
+  it('con el total por encima del mínimo, el envío es gratis sin importar la provincia', () => {
+    expect(calcularCostoEnvio(50000, 'Santa Fe')).toBe(0);
+  });
+
+  it.each([
+    ['Buenos Aires', 1500],
+    ['CABA', 1000],
+    ['Córdoba', 2500],
+  ])('por debajo del mínimo, en %s el envío cuesta %i', (provincia, costoEsperado) => {
+    expect(calcularCostoEnvio(1000, provincia)).toBe(costoEsperado);
+  });
+});
+
+describe('clasificarCliente', () => {
+  it.each([
+    [150000, 'vip'],
+    [100000, 'vip'],
+    [75000, 'frecuente'],
+    [50000, 'frecuente'],
+    [20000, 'regular'],
+    [10000, 'regular'],
+    [5000, 'nuevo'],
+    [0, 'nuevo'],
+  ])('con un histórico de %i, el nivel es %s', (totalHistorico, nivelEsperado) => {
+    expect(clasificarCliente(totalHistorico)).toBe(nivelEsperado);
   });
 });
