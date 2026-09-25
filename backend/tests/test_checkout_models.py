@@ -62,6 +62,12 @@ class TestCustomerInfoTelefono:
 
         assert "número" in str(exc_info.value).lower()
 
+    def test_telefono_vacio_es_rechazado(self):
+        with pytest.raises(ValidationError) as exc_info:
+            _customer(telefono="")
+
+        assert "requerido" in str(exc_info.value).lower()
+
 
 class TestCheckoutRequestCart:
     def test_carrito_vacio_es_rechazado(self):
