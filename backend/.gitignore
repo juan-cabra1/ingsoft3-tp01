@@ -10,3 +10,9 @@ venv/
 
 # Uploads
 uploads/
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
