@@ -1,0 +1,20 @@
+[run]
+branch = True
+omit =
+    venv/*
+    tests/*
+    test_api.py
+    main.py
+    database.py
+    config.py
+    logging_config.py
+    middleware/*
+    migrate_cloudinary.py
+    migrate_imagenes.py
+    models/admin_user.py
+    models/drop.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+fail_under = 28

@@ -5,3 +5,8 @@ venv/
 uploads/
 .git/
 **/bin/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+coverage.json
