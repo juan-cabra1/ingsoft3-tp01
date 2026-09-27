@@ -27,6 +27,7 @@ from logging_config import setup_logging, get_logger
 from middleware.request_tracing import RequestTracingMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
 from middleware.metrics import log_error_event
+from utils.cache_control import calcular_cache_control
 from sqlalchemy import text
 
 settings = get_settings()
@@ -125,22 +126,14 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestTracingMiddleware)
 
 
-_DYNAMIC_PREFIXES = ("/products", "/drops")
-
 @app.middleware("http")
 async def cache_control_middleware(request: Request, call_next):
     response = await call_next(request)
-    if (
-        request.method == "GET"
-        and not request.url.path.startswith("/admin")
-        and response.status_code == 200
-    ):
-        if any(request.url.path.startswith(p) for p in _DYNAMIC_PREFIXES):
-            # Products and drops change via admin CRUD — never let the browser
-            # serve a stale version; the frontend Map handles short-term dedup.
-            response.headers["Cache-Control"] = "no-store"
-        else:
-            response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=300"
+    cache_control = calcular_cache_control(
+        request.method, request.url.path, response.status_code
+    )
+    if cache_control is not None:
+        response.headers["Cache-Control"] = cache_control
     return response
 
 
