@@ -13,6 +13,9 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov', 'json-summary'],
       include: ['src/lib/**', 'src/services/**'],
+      // sentry.js es sólo wiring de una herramienta externa (arranque), sin
+      // reglas propias — igual que logging_config.py del lado del backend.
+      exclude: ['src/lib/sentry.js'],
       thresholds: { lines: 16, branches: 12 },
       // Resuelto en JS (no en el shell) para que ande igual en bash y en
       // PowerShell: el pipeline pasa COVERAGE_DIR, en tu máquina usa el default.
