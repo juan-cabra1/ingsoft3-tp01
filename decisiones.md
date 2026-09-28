@@ -107,3 +107,82 @@ Criterios de aceptación:
 
 ## 5. Declaracion de uso de IA
 - Use IA tambien para diagnosticar la corrupcion del README (bytes nulos por PowerShell). Verifique el diagnostico yo mismo revisando los bytes del archivo con xxd, corriendo el comando file antes y despues del fix, y confirmando el render correcto en GitHub.
+
+# TP5 - Testing y Calidad
+
+## 1. Qué lógica elegí testear y por qué
+
+Elegí las reglas de checkout (validación del carrito, cantidad > 0, stock insuficiente, datos del cliente) y las de auth (hashing de password, JWT, guard de rutas admin) porque son las mismas que ya había identificado en el TP2 como las más relevantes: un bug ahí significa una venta mal cobrada o una ruta de admin sin proteger. Backend: 38 tests repartidos en 8 reglas distintas (sumé la decisión de Cache-Control del §3 más abajo). Frontend: 36 tests sobre la lógica del carrito (`src/lib/carrito.js`), la resolución de imágenes (`src/lib/resolveImageUrl.js`) y el login (`src/services/api.js`).
+
+## 2. Umbral de coverage
+
+**Backend: 28%.** Con `pytest-cov`, el `fail_under` que declarás en `.coveragerc` mide una métrica **combinada** de línea+rama, no las separa como `coverlet` en .NET — antes de las demos del §3.5 mi cobertura real era 30,04% (31,91% de línea, 18,75% de rama por separado), así que puse el umbral un poco por debajo para tener margen sin volverlo inofensivo.
+
+**Frontend: `lines: 16, branches: 12`.** Acá sí pude poner un número para cada métrica por separado (vitest lo permite). Antes de las demos medía 18,18% de línea y 14,75% de rama.
+
+Los dos números están anclados en mi medición real de esa semana, no en un "número que suena bien".
+
+El resumen de cobertura (línea y rama, backend y frontend) y el reporte descargable de la corrida más reciente en `main`: https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/36349081935
+
+## 3. Qué dejé afuera de la cuenta de cobertura
+
+**Backend** (vía `omit` en `.coveragerc`):
+- `main.py`, `database.py`, `config.py`, `logging_config.py`, `middleware/*` — arranque y configuración de servicios, sin reglas de negocio.
+- `migrate_cloudinary.py`, `migrate_imagenes.py` — scripts de migración de datos, se corren una vez a mano.
+- `models/admin_user.py`, `models/drop.py` — son clases ORM/Pydantic sin un solo `field_validator`, sólo propiedades.
+
+Lo que **no** excluí: `models/checkout.py` y `models/product.py`, aunque también tienen clases de datos, porque ahí sí hay validadores con reglas reales (`quantity_must_be_positive`, `email_valid`, etc.) — excluir el archivo entero hubiera escondido justo lo que tengo que probar.
+
+**Frontend** (vía `include` en `vite.config.js`, apuntando sólo a `src/lib/**` y `src/services/**`, y `exclude` para `src/lib/sentry.js`): todo lo demás (componentes, páginas) queda afuera porque testearlos como componente pide jsdom + Testing Library, que la guía marca como opcional — la UI se cubre end-to-end en el TP7. `sentry.js` es sólo wiring del SDK de Sentry (arranque de una herramienta externa, sin reglas propias), la misma categoría que `logging_config.py` del lado del backend. Usé `include` en vez de dejarlo por default a propósito: sin él, vitest 4+ sólo mide lo que tus tests importan, así que un archivo nuevo sin tests **no aparece** en la cuenta y el número queda ciego justo para lo que el umbral tiene que frenar.
+
+**La trampa del §2.4, que encontré en mi propio código.** Antes de dar esto por cerrado, releí qué había adentro de cada archivo que excluí — no alcanza con el nombre del archivo, hay que mirar el contenido. Y encontré una: `main.py` tenía un middleware (`cache_control_middleware`) con una decisión real adentro (qué header `Cache-Control` mandar, según método/ruta/status), no sólo wiring. Era exactamente la trampa que la guía advierte: "si todavía tenés reglas adentro, primero sacalas, y recién después excluís". La extraje a `utils/cache_control.py` como función pura (`calcular_cache_control`), le escribí 11 tests sobre sus 5 caminos, y recién ahí `main.py` quedó siendo arranque de verdad. También encontré `resolveImageUrl.js` en el frontend: sí tiene una regla (cómo resolver una imagen subida vs. una URL externa) y estaba en la carpeta que mido, pero sin un solo test — le agregué 3.
+
+## 4. Por qué coverage alto no garantiza calidad — mi ejemplo real
+
+No hizo falta inventar un ejemplo: mis metricas fueron realizadas con un numero **bajo**. Antes de las demos, mi backend completo estaba en 30% — bajo a propósito, porque servicios enteros como `drop_service.py` y `product_service.py`, o casi todos los routers, no tienen ni un test. Es exactamente lo que dice el §2.4: coverage bajo **sí** es señal confiable de que hay código sin ejercitar; el número no mentía.
+
+Y el caso inverso, el de "cobertura sin verdad": si escribiera `expect(calcularTotal(cart))` sin ningún `.toBe(...)` después, esa línea de `calcularTotal` quedaría 100% cubierta y no estaría verificando absolutamente nada — el mismo problema que el `CoberturaSinVerdad` de la guía, con mi propia función.
+
+## 5. Mi Pull Request bloqueado
+
+Hice dos demostraciones, no una:
+
+- **PR #25** (mergeada): agregué tres reglas nuevas al frontend (`calcularDescuentoPorCantidad`, `calcularCostoEnvio`, `clasificarCliente`) sin ningún test. El job de frontend se puso en rojo por **líneas** (15,56% contra el 16% requerido) — log: `ERROR: Coverage for lines (15.56%) does not meet global threshold (16%)`, corrida: https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/36187301105. Arreglé escribiendo 13 tests (uno por cada camino que las tres funciones declaran), el check pasó a verde y mergeé. Secuencia completa en https://github.com/juan-cabra1/ingsoft3-tp01/pull/25.
+- **PR #26**: agregué cuatro métodos nuevos a `CheckoutService` en el backend, también sin tests. Rompe por el **combinado** línea+rama (27,41% contra el 28% requerido) — log: `FAIL Required test coverage of 28.0% not reached. Total coverage: 27.41%`, corrida: https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/36189044904. No la corregí: https://github.com/juan-cabra1/ingsoft3-tp01/pull/26.
+
+En los dos casos, todo compilaba perfecto y los tests existentes pasaban en verde — el merge se bloqueó únicamente por el número de cobertura.
+
+## 6. Refactor para poder mockear
+
+En el frontend, `useCart.js` (un hook de React con `useState`) no se podía testear como función pura. Extraje la lógica a `src/lib/carrito.js` (`calcularTotal`, `agregarItem`, `actualizarCantidad`) y el hook ahora delega ahí — mismo comportamiento, pero testeable sin React ni DOM.
+
+Dato aparte para el backend: **no** tuve que refactorizar nada para meter el mock de `ProductRepository.get_by_id` en `CheckoutService.validate_cart`. En Python `unittest.mock.patch("services.checkout_service.ProductRepository.get_by_id")` reemplaza el método directamente donde se importa, sin tocar el código de producción.
+
+## 7. Mi stack no es el de la cátedra (backend en Python, no .NET)
+
+| Fila de la tabla | Lo que usé |
+|---|---|
+| Dónde viven los tests | `backend/tests/`, carpeta aparte |
+| Parametrizado | `@pytest.mark.parametrize` |
+| Doble/mock | `unittest.mock.patch` |
+| Medir cobertura | `pytest-cov` (`--cov-branch` para rama) |
+| Umbral que rompe el build | `fail_under` en `.coveragerc` |
+| Qué entra en la cuenta | `omit` en `.coveragerc` |
+| Reporte legible | HTML nativo de `coverage.py` (no usé ReportGenerator — el propio `--cov-report=html` de Python ya da un sitio navegable, sin instalar nada del ecosistema .NET) |
+| Que las deps de test entren al Dockerfile | `requirements-dev.txt` instalado en una etapa `test` aparte, `FROM build`, que nunca llega a la imagen final |
+
+El frontend sí usa el mismo stack que la guía (vitest).
+
+## 8. El ejercicio de la rama sin cubrir
+
+Elegí `models/checkout.py`, línea 51 — el `raise ValueError("El teléfono es requerido")` dentro de `if not v or not v.strip()`. El test existente de teléfono sólo probaba `"abc123"` (letras), así que nunca se recorría el lado del `or` donde `v` es directamente un string vacío. La entrada que la ejercita es `telefono=""`. Decidí agregarla como test (PR #27: https://github.com/juan-cabra1/ingsoft3-tp01/pull/27) porque, a diferencia de lo que pensé al principio, no es una rama muerta: `telefono` es `str` en el modelo (no `Optional`), así que Pydantic nunca deja pasar un `None`, pero sí deja pasar `""` — es un input real que un cliente podría mandar.
+
+## 9. Problemas encontrados y cómo los resolví
+
+- El contenedor de tests no tiene `.env` (nunca se copia, es secreto), así que `Settings` fallaba por `DATABASE_URL`, `JWT_SECRET_KEY` y `WHATSAPP_NUMBER` faltantes. Se lo pasé como variables de entorno dummy en el `docker run` del pipeline — los tests no tocan una base real, así que alcanza con un valor sintácticamente válido.
+- `.coverage`, `.pytest_cache` y `htmlcov/` generados en mi máquina se colaban en la imagen de Docker porque el `.dockerignore` no los excluía, y contaminaban la corrida del contenedor con datos de una corrida anterior. Se resolvió agregándolos al `.dockerignore`.
+- Al revisar mis propias exclusiones de cobertura antes de cerrar el TP, encontré que `main.py` tenía una regla real escondida: el middleware `cache_control_middleware` decidía qué header `Cache-Control` mandar según el método HTTP, la ruta y el status code — eso es una decisión, no wiring. La resolví extrayéndola a una función pura, `utils/cache_control.calcular_cache_control(metodo, ruta, status)`, que devuelve el header (o `None`) sin tocar `request`/`response` de FastAPI. Le escribí 11 tests parametrizados cubriendo los 5 caminos (método distinto de GET, status de error, ruta de admin, rutas dinámicas, ruta estática). `main.py` ahora sólo llama a esa función y setea el header si no es `None` — mismo comportamiento, cero lógica propia. PR: https://github.com/juan-cabra1/ingsoft3-tp01/pull/28.
+
+## 10. Declaración de uso de IA
+
+Usé Claude Code para: escribir la suite de tests de los dos lados (backend y frontend) a partir de las reglas que yo ya tenía identificadas del TP2, calcular exactamente cuánta cobertura hacía falta bajar para que el umbral rompiera de verdad en las demos del §3.5, armar la configuración de `pytest-cov`/`vitest coverage` y las etapas de test en los Dockerfiles, y escribir los pasos nuevos del `ci.yml`. Verifiqué cada pieza corriendo los tests y el pipeline real antes de aceptarla: localmente con Docker antes de tocar el YAML, y después mirando los logs de las corridas reales en GitHub Actions para confirmar que el mensaje de error decía exactamente lo que esperaba.
