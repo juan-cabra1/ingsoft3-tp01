@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p backend-coverage
           docker run --rm \
-            -e DATABASE_URL="mysql+pymysql://user:pass@localhost:3306/test_db" \
+            -e DATABASE_URL="postgresql+psycopg://user:pass@localhost:5432/test_db" \
             -e JWT_SECRET_KEY="ci-test-secret-key" \
             -e WHATSAPP_NUMBER="5490000000000" \
             -v "${{ github.workspace }}/backend-coverage:/out" \
