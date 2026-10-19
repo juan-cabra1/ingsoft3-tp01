@@ -4,7 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 COPY . .
-ARG VITE_API_URL=http://localhost:8000
+# Mismo origen: el navegador le pide a nginx (/api/...) y nginx lo manda al backend
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
@@ -14,6 +15,9 @@ ENTRYPOINT ["npm", "run", "test:ci"]
 
 # ---- Etapa 3: nginx sirve los estaticos ----
 FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# nginx reemplaza ${VARIABLE} de /etc/nginx/templates/ al arrancar (la imagen no lleva la dirección del backend)
+COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
+ENV BACKEND_URL=http://backend:8000 \
+    DNS_RESOLVER=127.0.0.11
 EXPOSE 80
