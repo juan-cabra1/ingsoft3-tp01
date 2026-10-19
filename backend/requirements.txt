@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 sqlalchemy
-pymysql
+psycopg[binary]
 pydantic-settings
 python-jose[cryptography]
 bcrypt

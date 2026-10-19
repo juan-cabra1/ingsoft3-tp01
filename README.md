@@ -2,7 +2,7 @@
 
 # Proyecto IngSoft3
 
-E-commerce Bako Lifestyle — API (FastAPI) + Frontend (React/Vite servido con Nginx) + MySQL, todo orquestado con Docker Compose.
+E-commerce Bako Lifestyle — API (FastAPI) + Frontend (React/Vite servido con Nginx) + PostgreSQL, todo orquestado con Docker Compose.
 
 ## Requisitos previos
 
@@ -26,10 +26,10 @@ cd ingsoft3-tp01
 cp .env.example .env
 ```
 
-Editá `.env` y completá los valores (como mínimo `MYSQL_ROOT_PASSWORD` y `JWT_SECRET_KEY`):
+Editá `.env` y completá los valores (como mínimo `POSTGRES_PASSWORD` y `JWT_SECRET_KEY`):
 
 ```env
-MYSQL_ROOT_PASSWORD=tu_password
+POSTGRES_PASSWORD=tu_password
 WHATSAPP_NUMBER=549123456789
 JWT_SECRET_KEY=change_me_to_a_random_64_char_string
 ```

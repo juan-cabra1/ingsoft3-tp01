@@ -8,15 +8,14 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from typing import Generator
 
 from config import get_settings
+from utils.database_url import normalize_database_url
 
 settings = get_settings()
 
-# Fix for Railway providing mysql:// (we use pymysql)
-db_url = settings.DATABASE_URL
-if db_url and db_url.startswith("mysql://"):
-    db_url = db_url.replace("mysql://", "mysql+pymysql://", 1)
+# Providers (Neon, Render...) hand out postgresql:// — name the psycopg 3 driver
+db_url = normalize_database_url(settings.DATABASE_URL)
 
-# Create engine — pool_pre_ping keeps connections alive
+# Create engine — pool_pre_ping keeps connections alive (Neon suspends idle compute)
 engine = create_engine(
     db_url,
     pool_pre_ping=True,
