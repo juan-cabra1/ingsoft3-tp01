@@ -4,7 +4,7 @@ Drop and Subcategoria SQLAlchemy models and Pydantic schemas.
 
 import re
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel
 
@@ -16,6 +16,7 @@ from database import Base
 class SubcategoriaModel(Base):
     """Subcategorias table — optional grouping within a drop."""
     __tablename__ = "subcategorias"
+    __table_args__ = (Index("idx_subcategorias_drop_slug", "drop_id", "slug"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     drop_id = Column(Integer, ForeignKey("drops.id", ondelete="CASCADE"), nullable=False)

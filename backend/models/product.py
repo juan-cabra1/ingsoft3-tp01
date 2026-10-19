@@ -24,8 +24,8 @@ class ProductModel(Base):
     imagenes = Column(JSON, default=list)
     descripcion = Column(Text, nullable=True)
     detalle = Column(Text, nullable=True)
-    drop_id = Column(Integer, ForeignKey("drops.id", ondelete="SET NULL"), nullable=True)
-    subcategoria_id = Column(Integer, ForeignKey("subcategorias.id", ondelete="SET NULL"), nullable=True)
+    drop_id = Column(Integer, ForeignKey("drops.id", ondelete="SET NULL"), nullable=True, index=True)
+    subcategoria_id = Column(Integer, ForeignKey("subcategorias.id", ondelete="SET NULL"), nullable=True, index=True)
     orden = Column(Integer, nullable=False, default=0)
 
 

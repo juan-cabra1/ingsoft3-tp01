@@ -52,12 +52,8 @@ async def lifespan(app: FastAPI):
     Startup: create tables and seed admin user if needed.
     Shutdown: cleanup.
     """
-    # Create all tables
+    # Create all tables (and their indexes, declared in the models)
     Base.metadata.create_all(bind=engine)
-
-    # Auto-migrate
-    from utils.db_setup import run_migrations
-    run_migrations(engine)
 
     # Sync admin user from .env — creates or updates credentials on every startup
     db = SessionLocal()
