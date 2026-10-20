@@ -28,6 +28,7 @@ from middleware.request_tracing import RequestTracingMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
 from middleware.metrics import log_error_event
 from utils.cache_control import calcular_cache_control
+from utils.health import build_health_payload
 from sqlalchemy import text
 
 settings = get_settings()
@@ -185,12 +186,9 @@ def health_check():
         if db:
             db.close()
 
-    uptime_seconds = round(_time.time() - _start_time)
-    status = "healthy" if db_ok else "degraded"
-
-    return {
-        "status": status,
-        "version": "2.1.0",
-        "uptime_seconds": uptime_seconds,
-        "database": "connected" if db_ok else "unreachable",
-    }
+    return build_health_payload(
+        db_ok=db_ok,
+        uptime_seconds=round(_time.time() - _start_time),
+        commit=settings.COMMIT_SHA,
+        version="2.1.0",
+    )
