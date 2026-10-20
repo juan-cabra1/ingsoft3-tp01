@@ -3,6 +3,7 @@ Application settings loaded from environment variables (.env file).
 Uses pydantic-settings for type-safe configuration.
 """
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -40,6 +41,10 @@ class Settings(BaseSettings):
     # Observability
     SENTRY_DSN: str = ""  # Empty = disabled
     ENVIRONMENT: str = "production"
+
+    # Commit this instance was built from. Render injects RENDER_GIT_COMMIT on its own;
+    # COMMIT_SHA is the provider-neutral name for any other platform.
+    COMMIT_SHA: str = Field(default="", validation_alias=AliasChoices("COMMIT_SHA", "RENDER_GIT_COMMIT"))
 
     @property
     def cors_origins_list(self) -> list[str]:
