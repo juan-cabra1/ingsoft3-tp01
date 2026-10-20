@@ -26,8 +26,8 @@ export default function HeroSection() {
                         </span>
 
                         <h1 className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-bold text-white leading-tight mb-6">
-                            Bako
-                            <span className="block gradient-text">Lifestyle</span>
+                            Gorras
+                            <span className="block gradient-text">Anashe</span>
                         </h1>
 
                         <p className="text-lg sm:text-xl text-[#a0a0a0] max-w-lg mx-auto lg:mx-0 mb-8">
