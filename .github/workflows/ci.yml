@@ -164,6 +164,9 @@ jobs:
     if: github.ref == 'refs/heads/main'        # los PRs verifican; solo main despliega
     environment: qa
     steps:
+      - name: Bajar el código al runner (para tener scripts/smoke.sh)
+        uses: actions/checkout@v6
+
       # El hook pelado despliega la punta de la rama; con &ref le decimos a Render
       # QUÉ commit desplegar: el que este pipeline acaba de verificar. El hook de
       # Render ya trae un ?key=..., por eso va & y no ?.
@@ -177,25 +180,11 @@ jobs:
           curl -fsS --max-time 30 "$HOOK_API&ref=$GITHUB_SHA"
           curl -fsS --max-time 30 "$HOOK_FRONT&ref=$GITHUB_SHA"
 
-      - name: Smoke test (espera a que QA conteste)
+      - name: Smoke test (espera a que QA corra este commit)
         shell: bash
         env:
           URL_API: https://bako-api-qa.onrender.com
           URL_FRONT: https://bako-front-qa.onrender.com
-        run: |
-          echo "Esperando a que QA esté vivo..."
-          for i in $(seq 1 30); do
-            # --max-time en cada curl: un servicio despertando de un cold start acepta
-            # la conexión y no contesta; sin tope el job se cuelga hasta el límite del runner.
-            # Prueba cuatro cosas: la api viva, la BD (/products la toca), el front servido
-            # y el proxy del front hacia SU api (/api/products pasa por nginx).
-            if curl -fsS --max-time 10 "$URL_API/health" > /dev/null \
-               && curl -fsS --max-time 10 "$URL_API/products" > /dev/null \
-               && curl -fsS --max-time 10 "$URL_FRONT/" > /dev/null \
-               && curl -fsS --max-time 10 "$URL_FRONT/api/products" > /dev/null; then
-              echo "✅ QA responde (API + BD + front + proxy)"; exit 0
-            fi
-            echo "intento $i/30: todavía no responde"
-            sleep 20
-          done
-          echo "❌ QA no respondió a tiempo"; exit 1
+          EXPECTED_SHA: ${{ github.sha }}
+          ENV_NAME: QA
+        run: bash scripts/smoke.sh
