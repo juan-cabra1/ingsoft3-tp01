@@ -157,3 +157,45 @@ jobs:
           tags: ghcr.io/${{ github.repository }}-frontend:sha-${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  deploy-qa:
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]     # sin CI verde no hay deploy
+    if: github.ref == 'refs/heads/main'        # los PRs verifican; solo main despliega
+    environment: qa
+    steps:
+      # El hook pelado despliega la punta de la rama; con &ref le decimos a Render
+      # QUÉ commit desplegar: el que este pipeline acaba de verificar. El hook de
+      # Render ya trae un ?key=..., por eso va & y no ?.
+      # Ojo: Render RECONSTRUYE ese commit desde el repo, no usa la imagen publicada
+      # en ghcr.io (eso lo cierra el TP7).
+      - name: Disparar deploy en Render (backend + front) — del commit verificado
+        env:
+          HOOK_API: ${{ secrets.RENDER_HOOK_API_QA }}
+          HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONT_QA }}
+        run: |
+          curl -fsS --max-time 30 "$HOOK_API&ref=$GITHUB_SHA"
+          curl -fsS --max-time 30 "$HOOK_FRONT&ref=$GITHUB_SHA"
+
+      - name: Smoke test (espera a que QA conteste)
+        shell: bash
+        env:
+          URL_API: https://bako-api-qa.onrender.com
+          URL_FRONT: https://bako-front-qa.onrender.com
+        run: |
+          echo "Esperando a que QA esté vivo..."
+          for i in $(seq 1 30); do
+            # --max-time en cada curl: un servicio despertando de un cold start acepta
+            # la conexión y no contesta; sin tope el job se cuelga hasta el límite del runner.
+            # Prueba cuatro cosas: la api viva, la BD (/products la toca), el front servido
+            # y el proxy del front hacia SU api (/api/products pasa por nginx).
+            if curl -fsS --max-time 10 "$URL_API/health" > /dev/null \
+               && curl -fsS --max-time 10 "$URL_API/products" > /dev/null \
+               && curl -fsS --max-time 10 "$URL_FRONT/" > /dev/null \
+               && curl -fsS --max-time 10 "$URL_FRONT/api/products" > /dev/null; then
+              echo "✅ QA responde (API + BD + front + proxy)"; exit 0
+            fi
+            echo "intento $i/30: todavía no responde"
+            sleep 20
+          done
+          echo "❌ QA no respondió a tiempo"; exit 1

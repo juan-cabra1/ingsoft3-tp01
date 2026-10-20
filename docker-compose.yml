@@ -24,10 +24,10 @@ services:
         condition: service_healthy
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: http://localhost:8001
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+      DNS_RESOLVER: 127.0.0.11
     ports:
       - "3000:80"
     depends_on:
