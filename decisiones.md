@@ -186,3 +186,123 @@ Elegí `models/checkout.py`, línea 51 — el `raise ValueError("El teléfono es
 ## 10. Declaración de uso de IA
 
 Usé Claude Code para: escribir la suite de tests de los dos lados (backend y frontend) a partir de las reglas que yo ya tenía identificadas del TP2, calcular exactamente cuánta cobertura hacía falta bajar para que el umbral rompiera de verdad en las demos del §3.5, armar la configuración de `pytest-cov`/`vitest coverage` y las etapas de test en los Dockerfiles, y escribir los pasos nuevos del `ci.yml`. Verifiqué cada pieza corriendo los tests y el pipeline real antes de aceptarla: localmente con Docker antes de tocar el YAML, y después mirando los logs de las corridas reales en GitHub Actions para confirmar que el mensaje de error decía exactamente lo que esperaba.
+
+# TP6 - CD: environments, aprobaciones y deployment patterns
+
+## Enlaces de este TP
+
+- **Paquetes públicos** (los dos etiquetados con el commit del merge del PR #30, `d98c48af3a07e8892045f9ba8a9e7eae1bfb17ba`; bajan sin credenciales):
+  - Backend: https://github.com/juan-cabra1/ingsoft3-tp01/pkgs/container/ingsoft3-tp01-backend
+  - Frontend: https://github.com/juan-cabra1/ingsoft3-tp01/pkgs/container/ingsoft3-tp01-frontend
+  - `docker pull --platform linux/amd64 ghcr.io/juan-cabra1/ingsoft3-tp01-backend:sha-d98c48af3a07e8892045f9ba8a9e7eae1bfb17ba`
+  - `docker pull --platform linux/amd64 ghcr.io/juan-cabra1/ingsoft3-tp01-frontend:sha-d98c48af3a07e8892045f9ba8a9e7eae1bfb17ba`
+- **La cadena del registry** (los dos eslabones que no se ven navegando):
+  - Un PR con los tests en verde donde «Entrar al registry» aparece **salteado** (corrida del PR #30): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39321249297/job/118295565946
+  - La lista de pasos de una corrida de `main`, donde «Construir y publicar la imagen del backend» es el **último** paso (el 10, después de los tests): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39321629419/job/118296859395
+- **Entornos vivos:**
+  - QA: front https://bako-front-qa.onrender.com · api https://bako-api-qa.onrender.com/health
+  - PROD: front https://bako-front-prod.onrender.com · api https://bako-api-prod.onrender.com/health
+- **Release:** https://github.com/juan-cabra1/ingsoft3-tp01/releases/tag/v6.0.0
+
+## 1. Por qué el artefacto se publica sólo con la verificación en verde
+
+La imagen se publica en el último paso del mismo job que corrió los tests. Si los tests fallan, el job muere ahí y ese paso nunca llega a correr: la condición no está escrita en ningún `if`, está en el orden de los pasos. Se sostiene por tres eslabones encadenados: nada entra a `main` sin los dos checks en verde (el gate del TP4 más el umbral del TP5), sólo lo que entra a `main` se publica (`push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}`) y publicar es lo último del job.
+
+Si el registry recibiera imágenes aunque los tests fallen, que una imagen esté publicada dejaría de querer decir «esto pasó la verificación» y pasaría a ser un depósito de cosas que alguien construyó alguna vez. Lo que **no** garantiza: alguien con permisos puede hacer un `docker push` a mano desde su máquina y entra igual. La cadena garantiza lo que publica *el pipeline*, no lo que físicamente puede entrar. Y una etiqueta `sha-…` apunta a un commit pero se podría re-etiquetar; lo que identifica el contenido exacto es el digest (`sha256:…`), que hoy no uso para desplegar (los digests de las dos imágenes del PR #30 son `sha256:63a5f0a0da26b1e3218016fa8e04db7e6dd58e98c5e593be535948e51cfe2a53` el backend y `sha256:a94acfc883422299fa358efbf2540679c135f5817a1ae0a75f8d4aac710f7566` el frontend).
+
+## 2. Continuous Delivery vs Continuous Deployment
+
+Implementé **Continuous Delivery**: cada cambio verificado llega solo a QA, pero a PROD sólo llega si un humano lo aprueba en el environment `production`. No implementé Continuous Deployment (sacar al humano) porque mi red de seguridad todavía es floja: la cobertura es de ~32% en el backend y ~33% en el frontend, no tengo tests end-to-end ni métricas que me avisen si un deploy empeora algo. Si saco la aprobación, automatizo la propagación de errores. Para tener Deployment me faltaría más cobertura sobre las rutas críticas (checkout, admin), tests end-to-end y observabilidad (alertas sobre errores y latencia).
+
+## 3. Qué proveedor usé y cómo cumplo los cinco puntos del contrato
+
+Usé Render (los contenedores) y Neon (Postgres), con GitHub Actions y los environments de GitHub.
+1. **Dos entornos separados con URL pública:** QA y PROD, cada uno con front y api (4 servicios web).
+2. **Una base por entorno:** `bako_qa` y `bako_prod` en el mismo proyecto de Neon.
+3. **Front y back como contenedores desde mis Dockerfiles:** los 4 servicios están creados con runtime Docker.
+4. **El deploy lo dispara el pipeline con el commit verificado:** Auto-Deploy en `Off` en los cuatro y deploy hooks llamados con `&ref=$GITHUB_SHA`.
+5. **PROD detrás de la aprobación:** environment `production` con required reviewer (yo) y *Prevent self-review* desactivado.
+
+**Qué quedó por variable y qué quedó dentro de la imagen.** Por variable de entorno: en la api, `DATABASE_URL`, `JWT_SECRET_KEY`, `WHATSAPP_NUMBER`, `ADMIN_DEFAULT_PASSWORD`, `ENVIRONMENT` y `PORT`; en el front, `BACKEND_URL` y `DNS_RESOLVER`. El commit que corre lo inyecta Render solo (`RENDER_GIT_COMMIT`). Dentro de la imagen quedó el código, las dependencias y los valores por defecto de desarrollo (`BACKEND_URL=http://backend:8000`, para que `docker compose up` siga andando). La dirección del backend ya **no** está en la imagen del front: el front le pide a su mismo origen (`/api/...`) y nginx lee `BACKEND_URL` al arrancar desde una plantilla (`default.conf.template`) y le saca el prefijo `/api` antes de reenviar, porque mis rutas del backend no tienen ese prefijo (`/products`, `/drops`, …). Lo comprobamos construyendo una sola imagen y corriéndola con y sin variables: el `resolver` y el `set $backend_api` cambiaron según el entorno. Eso es lo que hace posible el TP7, donde la misma imagen tiene que servir en QA y en PROD.
+
+**Cómo comprobé que cada entorno usa su propia base.** Inserté un producto `SOY PROD` sólo en `bako_prod` desde el SQL Editor de Neon: aparece en la api de PROD (9 productos) y no en la de QA (8 productos). Los deploy hooks de PROD apuntan a los servicios de PROD: comparé el id `srv-…` de cada hook con el de su servicio en Render y coinciden.
+
+## 4. El diseño de la cadena y el alcance de cada secret
+
+```
+build-backend ┐
+              ├─► deploy-qa (needs ambos; if main; environment: qa) ─► deploy-prod (needs deploy-qa; environment: production)
+build-frontend┘
+```
+
+- `needs:` encadena la promoción: sin los dos builds en verde no hay deploy a QA, y sin QA vivo no hay deploy a PROD.
+- `if: github.ref == 'refs/heads/main'` está sólo en `deploy-qa`: los PRs verifican pero no despliegan. `deploy-prod` no lo repite a propósito, lo hereda por la cadena (se ve en el PR #34: los dos jobs de deploy salen *skipped*).
+- `environment: qa` y `environment: production` conectan cada job con sus secrets, sus reglas y su historial en *Deployments*. QA no tiene reglas porque es automático a propósito.
+- **Alcance de los secrets:** los hooks de QA (`RENDER_HOOK_API_QA`, `RENDER_HOOK_FRONT_QA`) viven en el environment `qa`, y los de PROD (`RENDER_HOOK_API_PROD`, `RENDER_HOOK_FRONT_PROD`) en `production`. No hay ninguno a nivel repositorio (se comprueba con `gh secret list --env qa`, `gh secret list --env production` y `gh secret list`). Si los de PROD estuvieran en el repo, cualquier job de cualquier rama podría desplegar a producción sin pasar por la aprobación; en el environment, sólo un job aprobado hacia `production` los puede leer.
+- `&ref=$GITHUB_SHA` en los hooks: el hook pelado despliega la punta de la rama, no el commit que verifiqué. En PROD importa más todavía, porque entre que la corrida queda esperando y yo la apruebo `main` se puede mover: sin el `ref`, aprobaría el commit A y subiría lo último. En la primera corrida a QA miré en *Deploys* de Render que los dos servicios decían el commit del merge (`708ff15`).
+- `concurrency: deploy-prod` (con `cancel-in-progress: false`) para que dos deploys a PROD no se pisen. Ver la observación del §9: no ordena la cola de aprobaciones.
+
+## 5. Qué mira mi aprobador antes de aprobar
+
+Antes de apretar *Approve* miro: que `deploy-qa` esté en verde **y** que su smoke haya visto el commit nuevo corriendo (no uno viejo); qué cambia el PR de esa corrida (si toca variables, la connection string o la base, lo miro con más calma); que no haya otra corrida más nueva esperando (si la hay, la vieja se rechaza para no hacer retroceder PROD); y que no sea un momento en el que no convenga desplegar. Lo que mi aprobador **no** puede ver hoy: cómo se va a comportar el cambio con tráfico real (no tengo métricas de errores ni de latencia por entorno) ni si un cambio de esquema de base es compatible hacia atrás. Me falta observabilidad para decidir mejor que «QA verde y el diff parece razonable».
+
+## 6. La letra chica del free tier y cómo la maneja mi pipeline
+
+- **Render:** el servicio duerme a los ~15 minutos sin tráfico y el primer request tarda en despertarlo (el primer `/health` de la api de QA tardó ~24 segundos). Las 750 horas por mes son del workspace, no de cada servicio; como mis cuatro servicios duermen solos, no las agoto, y por eso no dejé nada haciendo ping para mantenerlos despiertos (eso sí las consumiría y podría suspender los servicios hasta fin de mes). Los minutos de build son 500 por mes en el workspace gratuito: cada promoción reconstruye hasta cuatro servicios. Consumo al día de hoy, según el panel de Render: 6 de los 500 minutos de pipeline incluidos.
+- **Neon:** suspende el cómputo a los ~5 minutos de inactividad y se despierta solo; el almacenamiento es de 0,5 GB. El engine de SQLAlchemy usa `pool_pre_ping=True`, que descarta una conexión muerta tras la suspensión y abre otra.
+- **Cómo lo maneja el pipeline:** el smoke reintenta 30 veces cada 20 segundos (unos 10 minutos) y cada `curl` lleva `--max-time 10`, porque un servicio despertando acepta la conexión y no contesta; sin ese tope, el job se colgaría hasta el límite del runner. Un `curl` seco habría dado falsos rojos.
+- **Elegí Neon y no el Postgres de Render** porque el gratuito de Render expira a los 30 días; el de Neon es permanente.
+- **Connection pooling de Neon (lo dejé apagado).** Vi que podía activar connection pooling e investigué qué era. Abrir una conexión nueva con la base es costoso (conexión TCP, handshake, autenticación), así que en vez de abrir una por cada pedido, un pool mantiene conexiones ya abiertas y las reutiliza, ahorrando recursos y tiempo. El pooling de Neon hace eso del lado del servidor: distintos usuarios comparten un conjunto de conexiones ya abiertas, que se les prestan mientras las necesitan. En mi caso lo apagué porque ya lo tengo contemplado dentro de mi código: el engine de SQLAlchemy mantiene su propio pool de conexiones (`pool_size=5`, `max_overflow=10`, `pool_pre_ping=True`) y hay una sola instancia por entorno, así que un segundo pool encima no me aportaba nada.
+
+## 7. Qué garantía pierdo porque Render reconstruye desde el repo
+
+Mi pipeline publica en ghcr.io la imagen que verificó, pero Render **no** ejecuta esa imagen: vuelve a construir el mismo commit desde el repositorio. Lo que corre en QA y en PROD es otra construcción del mismo código. Si entre un build y el otro cambió algo (una dependencia sin versión fija —mi `requirements.txt` no tiene versiones pinneadas— o una imagen base como `python:3.13-slim` que se actualizó), puede salir distinto de lo que mis tests aprobaron, y no tendría cómo enterarme. Se rompe el principio de «se promueve lo mismo que se verificó»: promuevo el mismo *commit*, no la misma *imagen*. Es lo que resuelve el TP7 desplegando la imagen del registry; esta sección del TP6 es lo que lo hace posible.
+
+Una buena práctica que mencionó Ariel (mi profe) en clase, y que podría agregar para reducir ese riesgo, es **fijar las versiones (pinnear) y no usar `latest` ni etiquetas que se mueven**. En mi backend hoy `requirements.txt` no tiene versiones (`fastapi`, `sqlalchemy`, … a secas), así que dos construcciones del mismo commit pueden instalar versiones distintas; fijándolas (`fastapi==x.y.z`) las dos construcciones instalarían lo mismo. Lo mismo con las imágenes base de los Dockerfiles: `python:3.13-slim`, `node:22-alpine` y sobre todo `nginx:alpine` son etiquetas que se mueven con el tiempo; fijar la versión exacta (o el digest) hace que la imagen base tampoco cambie sin que yo lo decida. En el frontend el riesgo ya es menor porque el Dockerfile usa `npm ci`, que instala exactamente lo que dice el `package-lock.json`.
+
+## 8. Qué prueba mi smoke test y qué no
+
+`scripts/smoke.sh` reintenta hasta que, a la vez: la api reporta en `/health` el commit esperado, el front reporta ese commit en `/version`, la base responde (`/products` toca la base) y el proxy del front hacia su api devuelve JSON (`/api/products`). No prueba que el flujo de compra funcione ni que el admin ande: es un chequeo de vida, no una prueba funcional.
+
+**Lo que aprendí con la primera corrida a QA.** Mi smoke inicial sólo pedía status 200 de varias URLs, y dio verde **un segundo** después de disparar los hooks, mientras Render todavía construía: seguía sirviendo la versión anterior, y la versión anterior de mi front respondía hasta `/api/health` con el `index.html` de la SPA y un 200. Lo detectamos comparando la hora del hook con la hora del verde y pidiéndole `/api/health` al front de QA. El arreglo fue que la api devuelva en `/health` el commit que corre (Render inyecta `RENDER_GIT_COMMIT`), que el front lo exponga en `/version`, y que el smoke falle hasta que ambos coincidan con `github.sha`. En la corrida siguiente `deploy-qa` tardó 48 segundos y vio dos veces la versión vieja antes de dar verde: https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39346836304
+
+## 9. Problemas encontrados y cómo los resolví
+
+- **Mi app era MySQL y Neon sólo ofrece Postgres.** Decidí migrar el motor en vez de cambiar de proveedor para quedarme en el free tier permanente. Como uso SQLAlchemy, el cambio fue chico: reemplacé `pymysql` por `psycopg`, pasé el compose local a `postgres:16-alpine` y reescribí lo que estaba atado a MySQL (un SQL crudo con `AUTO_INCREMENT` en `utils/db_setup.py`, que en una base nueva ni corría porque `create_all` ya crea las tablas; lo borré y declaré los índices en los modelos). No migré datos: el seed vuelve a cargar los productos. Lo verificamos contra un Postgres real (health, seed y CRUD del admin).
+- **No sabía qué runtime elegir en Render:** para el backend me ofrecía Python 3 y para el front no había una opción obvia. Con Python 3 Render ignora mi Dockerfile y construye a su manera, así que usé Docker en los cuatro (la columna Runtime del Dashboard lo confirma).
+- **No tenía una contraseña local de Postgres:** el contenedor de `postgres` exige `POSTGRES_PASSWORD`, así que la agregué a mi `.env`.
+- **Mi merge del PR #35 fue rechazado** («2 of 2 required status checks are expected»): al mergear antes el #34, `main` avanzó y mi rama quedó atrasada, y la protección de `main` (que exige la rama al día) lo frenó. Actualizamos la rama, esperamos los checks de nuevo y mergeó.
+- **Rechacé la corrida A sin escribir el comentario** y tuve que volver a correr el job fallido; para reordenar la cola también rechacé y volví a correr la B, así A quedaba primero. Los rechazos sin nota del intento 1 quedan en el historial, pero el que vale es el del intento 2, con mi motivo escrito.
+- **Mi observación sobre `concurrency`.** La guía dice que no se midió qué pasa con `concurrency` cuando una corrida está esperando aprobación. Lo vi en mi repo: con A esperando revisión, el `deploy-prod` de B quedó **bloqueado detrás** de A («a job in this workflow is waiting for deploy-prod (CI #45) to complete before running») y sólo A mostraba *Review deployments*. O sea que `concurrency` evita que dos deploys se pisen, pero no ordena ni cancela la cola de aprobaciones, y me obligó a decidir primero sobre la vieja.
+
+**El gate funcionando, con mis dos corridas:**
+- **Rechazo** (corrida A, commit `513e5d4`, sólo agregaba el job de PROD): «Rechace el deploy porque seria aprobar una version de main atrasada, si apruebo y despliego el commit siguiente a este despliego una vez (tambien ahorro recursos y tiempo).» https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39350001231
+- **Aprobación** (corrida B, commit `e04d554`, con el título nuevo «Gorras Anashe» visible en PROD): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39350179159 — `deploy-prod` terminó en verde en 48 segundos y el smoke vio el commit nuevo corriendo.
+
+## 10. Deployment pattern para una producción real
+
+Para Bako en una producción real elegiría **blue-green**. Es un e-commerce: un deploy malo en horario de ventas cuesta ventas, y blue-green me da un rollback instantáneo (volver el switch) sin ventana de downtime. Cuesta el doble de infraestructura (dos entornos completos) y eso lo acepto porque la app es chica. Canary no lo elijo hoy porque no tengo la observabilidad que necesita para ser algo más que una ruleta: sin métricas de errores y latencia por versión no tengo cómo saber que el canario «sangra». Rolling lo descarto porque durante el reemplazo conviven dos versiones y mi app hace cambios de esquema sin migraciones formales. Feature flags sí los usaría para cosas puntuales (por ejemplo, prender una funcionalidad nueva del checkout sólo para mí primero), porque desacoplan el deploy del release. Lo que me falta hoy para ejecutar bien blue-green o canary: métricas y alertas por entorno, migraciones de base versionadas (hoy dependo de `create_all`) y un switch de tráfico real, cosa que el free tier de Render no me da.
+
+## 11. Plan de rollback y su tiempo medido
+
+**Plan, paso a paso, si un deploy aprobado sale mal:**
+1. Detectar: el smoke en rojo, `/health` degradado o un problema que reporte un usuario.
+2. Elegir el último commit bueno: el de la release anterior o el que figura en *Deployments → production*. Para este TP, `v6.0.0` = `e04d554aaf1fb09c3435e2aff0975255ff82e827`.
+3. Llamar los dos deploy hooks de PROD con ese commit (`&ref=<sha>`), copiándolos de Render porque el secret de GitHub no se puede volver a leer.
+4. Esperar a que en *Deploys* de cada servicio de PROD ese commit figure como **live**.
+5. Comprobar `/health` y `/version`: tienen que mostrar el commit anterior.
+6. Revertir el cambio en `main` con un PR, para que el próximo merge no vuelva a desplegar lo roto.
+
+**Tiempo medido:** **Unos 38 segundos** según Render (43 s en mi propia medición desde afuera). Hice el rollback de verdad una vez: con PROD en `857aa45` («Nueva Temporada»), llamé a los dos hooks de PROD con el commit de `v6.0.0` a las 16:25:56; consultando `/health` y `/version` cada 5 segundos, la api ya mostraba `e04d554` a los 37 s y el front a los 43 s, y PROD volvió a mostrar «Nueva Colección». Mi medición desde afuera tiene resolución de ±5 s. El rastro oficial está en *Deploys* de `bako-api-prod` y de `bako-front-prod`: Render marca el deploy de `e04d554` iniciado a las 16:25:58 (GMT-3) en los dos servicios, con una duración de 34,2 s en la api y 36,3 s en el front. Contando desde que llamé a los hooks (16:25:56) hasta que el último servicio quedó *live* (16:26:34) son unos 38 segundos. Es la métrica DORA de **tiempo de recuperación** (time to restore service).
+
+**Lo que el rollback de código no deshace:** los datos. Mi `SOY PROD` sigue en `bako_prod` aunque vuelva atrás, y una migración que borrara una columna seguiría borrada. Para eso haría falta migraciones reversibles y copias de la base antes de desplegar cambios de esquema. Y una decisión consciente: el rollback por hook **se salta el CI y la aprobación** (el hook es un secret que sólo yo tengo); lo acepto porque es una emergencia y la decisión humana la estoy tomando yo, pero lo dejo anotado como una puerta lateral.
+
+## 12. Qué pasa entre el merge y PROD (en mis palabras)
+
+Mergeo un PR a `main`. El workflow arranca: construyen y testean `build-backend` y `build-frontend` en paralelo, y cada uno termina publicando su imagen en ghcr.io como último paso. Cuando los dos terminan en verde, `deploy-qa` lee los hooks del environment `qa` y llama a Render con el commit exacto (`&ref=$GITHUB_SHA`), y el smoke espera hasta que api y front de QA reporten ese commit. Con QA verde, `deploy-prod` queda en *Waiting for review* porque el environment `production` exige un reviewer. Yo miro (§5) y apruebo o rechazo. Si apruebo, el job lee los hooks de PROD, llama a Render con el mismo commit y el smoke espera a que PROD corra ese commit. Después etiqueto lo que quedó en PROD con `v6.0.0` y publico la release.
+
+## 13. Declaración de uso de IA
+
+Usé Claude Code (CLI) como asistente durante todo el TP. **Lo que escribió la IA** y yo revisé: los jobs `deploy-qa` y `deploy-prod` del `ci.yml`, el cambio del build/publicación de imágenes, `scripts/smoke.sh`, la plantilla de nginx, el cambio de MySQL a Postgres (`database.py`, `utils/database_url.py`, los índices en los modelos, el compose) y sus tests, el campo `commit` en `/health` y el `/version` del front. También hizo los PRs, los merges y la release a pedido mío, y armó el script con el que se corrió el rollback. **Lo que decidí yo:** pasar de MySQL a Postgres, usar el proxy de nginx en vez de una configuración en runtime, borrar `db_setup.py`, arrancar de cero sin migrar datos, el texto de los cambios visibles del front («Gorras Anashe», «Nueva Temporada»), qué comentario escribir al rechazar, aprobar y rechazar las corridas de PROD, y hacer públicos los paquetes. **Lo que hice yo en las plataformas:** crear las cuentas y los servicios de Neon y Render, cargar los secrets de los environments, apagar el Auto-Deploy y probar con `SOY PROD` que cada entorno usa su base. El rollback lo ejecuté yo desde mi PowerShell, con un script que armó Claude (pide los deploy hooks con la pantalla oculta, los llama con el commit de `v6.0.0` y cronometra): los hooks los pegué yo, nunca pasaron por la IA.
+
+**Cómo lo verifiqué:** leí los diffs antes de mergear; corrimos los tests y levantamos el stack completo con Docker contra un Postgres real; comprobamos desde afuera qué commit corre en cada entorno (`/health` y `/version`); miré en Render qué commit decía cada deploy; y revisamos en los logs de Actions que el smoke esperara de verdad. Puedo explicar cada compuerta entre el merge y PROD (§12), cada secret (§4) y por qué el smoke de la primera versión daba verde sin probar nada (§8).
