@@ -22,7 +22,7 @@ export default function HeroSection() {
                         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                     >
                         <span className="inline-block text-sm font-semibold text-[#c9a962] uppercase tracking-widest mb-4">
-                            Nueva Colección
+                            Nueva Temporada
                         </span>
 
                         <h1 className="text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-bold text-white leading-tight mb-6">
