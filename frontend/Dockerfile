@@ -18,7 +18,9 @@ FROM nginx:alpine
 # nginx reemplaza ${VARIABLE} de /etc/nginx/templates/ al arrancar (la imagen no lleva la dirección del backend)
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
+# Commit del que sale esta imagen: lo pasa el pipeline con --build-arg y /version lo informa.
+ARG COMMIT_SHA=unknown
 ENV BACKEND_URL=http://backend:8000 \
     DNS_RESOLVER=127.0.0.11 \
-    RENDER_GIT_COMMIT=unknown
+    COMMIT_SHA=$COMMIT_SHA
 EXPOSE 80

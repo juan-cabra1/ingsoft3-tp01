@@ -83,6 +83,7 @@ jobs:
           context: ./backend
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}-backend:sha-${{ github.sha }}
+          build-args: COMMIT_SHA=${{ github.sha }}   # la imagen sabe de qué commit sale: /health lo informa
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -155,6 +156,7 @@ jobs:
           context: ./frontend
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}-frontend:sha-${{ github.sha }}
+          build-args: COMMIT_SHA=${{ github.sha }}   # la imagen sabe de qué commit sale: /version lo informa
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -167,18 +169,19 @@ jobs:
       - name: Bajar el código al runner (para tener scripts/smoke.sh)
         uses: actions/checkout@v6
 
-      # El hook pelado despliega la punta de la rama; con &ref le decimos a Render
-      # QUÉ commit desplegar: el que este pipeline acaba de verificar. El hook de
-      # Render ya trae un ?key=..., por eso va & y no ?.
-      # Ojo: Render RECONSTRUYE ese commit desde el repo, no usa la imagen publicada
-      # en ghcr.io (eso lo cierra el TP7).
-      - name: Disparar deploy en Render (backend + front) — del commit verificado
+      # Render no construye nada: EJECUTA la imagen que publicó este mismo pipeline. imgURL le
+      # dice cuál (la del commit verificado). --get --data-urlencode la agrega al hook (que ya
+      # trae ?key=...) y le codifica los ':' y '/'. La URL del hook va ÚLTIMA: es el único
+      # argumento suelto, y --data-urlencode se lleva el valor que tiene al lado.
+      - name: Desplegar en QA la IMAGEN del commit (backend + front)
         env:
           HOOK_API: ${{ secrets.RENDER_HOOK_API_QA }}
           HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONT_QA }}
         run: |
-          curl -fsS --max-time 30 "$HOOK_API&ref=$GITHUB_SHA"
-          curl -fsS --max-time 30 "$HOOK_FRONT&ref=$GITHUB_SHA"
+          IMG_API="ghcr.io/${{ github.repository }}-backend:sha-${{ github.sha }}"
+          IMG_FRONT="ghcr.io/${{ github.repository }}-frontend:sha-${{ github.sha }}"
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_API" "$HOOK_API"
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_FRONT" "$HOOK_FRONT"
 
       - name: Smoke test (espera a que QA corra este commit)
         shell: bash
@@ -204,17 +207,18 @@ jobs:
         uses: actions/checkout@v6
 
       # Entre que la corrida queda esperando aprobación y alguien la aprueba pueden pasar
-      # horas y main se mueve. Sin &ref, aprobar la corrida del commit A subiría lo último que
-      # haya en main: el aprobador firmaría algo que no se despliega. Con $GITHUB_SHA se
-      # despliega exactamente el commit que esta corrida verificó y que el aprobador vio.
-      # (Render reconstruye ese commit; no usa la imagen de ghcr.io: lo cierra el TP7.)
-      - name: Disparar deploy en Render (backend + front) — del commit aprobado
+      # horas y main se mueve. Sin decir QUÉ imagen, aprobar la corrida del commit A podría
+      # desplegar otra cosa. Con imgURL se despliega exactamente la imagen del commit que esta
+      # corrida verificó en QA y que el aprobador vio: la MISMA, sin reconstruir nada.
+      - name: Desplegar en PROD la MISMA imagen que verificó QA (backend + front)
         env:
           HOOK_API: ${{ secrets.RENDER_HOOK_API_PROD }}
           HOOK_FRONT: ${{ secrets.RENDER_HOOK_FRONT_PROD }}
         run: |
-          curl -fsS --max-time 30 "$HOOK_API&ref=$GITHUB_SHA"
-          curl -fsS --max-time 30 "$HOOK_FRONT&ref=$GITHUB_SHA"
+          IMG_API="ghcr.io/${{ github.repository }}-backend:sha-${{ github.sha }}"
+          IMG_FRONT="ghcr.io/${{ github.repository }}-frontend:sha-${{ github.sha }}"
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_API" "$HOOK_API"
+          curl -fsS --max-time 30 --get --data-urlencode "imgURL=$IMG_FRONT" "$HOOK_FRONT"
 
       - name: Smoke test PROD (espera a que PROD corra este commit)
         shell: bash

@@ -23,5 +23,9 @@ COPY --from=build /root/.local /root/.local
 COPY . .
 
 ENV PATH=/root/.local/bin:$PATH
+# Commit del que sale esta imagen: lo pasa el pipeline con --build-arg y /health lo informa.
+# Va al final para no invalidar las capas de arriba en cada commit.
+ARG COMMIT_SHA=unknown
+ENV COMMIT_SHA=$COMMIT_SHA
 EXPOSE 8000
 ENTRYPOINT ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
