@@ -83,6 +83,7 @@ jobs:
           context: ./backend
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}-backend:sha-${{ github.sha }}
+          build-args: COMMIT_SHA=${{ github.sha }}   # la imagen sabe de qué commit sale: /health lo informa
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -155,6 +156,7 @@ jobs:
           context: ./frontend
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}-frontend:sha-${{ github.sha }}
+          build-args: COMMIT_SHA=${{ github.sha }}   # la imagen sabe de qué commit sale: /version lo informa
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

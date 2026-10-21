@@ -8,12 +8,12 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Qué commit corre este front: lo inyecta la plataforma (Render pone RENDER_GIT_COMMIT);
-    # el default de la imagen es "unknown". El smoke del deploy lo compara con el commit esperado.
+    # Qué commit corre este front: el pipeline lo hornea en la imagen (build-arg COMMIT_SHA);
+    # el default es "unknown". El smoke del deploy lo compara con el commit esperado.
     location = /version {
         default_type text/plain;
         add_header Cache-Control "no-store";
-        return 200 "${RENDER_GIT_COMMIT}";
+        return 200 "${COMMIT_SHA}";
     }
 
     # La dirección del backend y el DNS llegan por variables de entorno: en compose,
