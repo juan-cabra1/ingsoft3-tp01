@@ -192,9 +192,81 @@ jobs:
           ENV_NAME: QA
         run: bash scripts/smoke.sh
 
+  integracion:
+    runs-on: ubuntu-latest
+    needs: deploy-qa                           # QA ya corre la imagen de ESTA corrida
+    environment: qa                            # de acá salen las credenciales del admin de QA
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Sin `playwright install`: estas pruebas son pedidos HTTP, no abren navegador.
+      # --legacy-peer-deps igual que el Dockerfile del front (react-helmet-async pide React <=18).
+      - name: Instalar dependencias
+        run: npm ci --legacy-peer-deps
+        working-directory: ./frontend
+
+      - name: Integración contra la api de QA
+        env:
+          API_BASE_URL: https://bako-api-qa.onrender.com    # la api, no el front
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx playwright test e2e/api.spec.js
+        working-directory: ./frontend
+
+      - name: Publicar reporte de integración
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}                # el reporte importa MÁS cuando falla
+        with:
+          name: playwright-report-integracion  # distinto del de e2e: dos iguales rompen la corrida
+          path: frontend/playwright-report
+          retention-days: 7
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: integracion                         # si la api está rota, no gastamos un browser en confirmarlo
+    environment: qa
+    timeout-minutes: 20                        # si algo se cuelga, el job muere en vez de esperar horas
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Preparar Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias y navegador
+        run: |
+          npm ci --legacy-peer-deps
+          npx playwright install --with-deps chromium
+        working-directory: ./frontend
+
+      - name: e2e contra QA
+        env:
+          E2E_BASE_URL: https://bako-front-qa.onrender.com   # el front de QA
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx playwright test e2e/tienda.spec.js          # SU archivo: sin esto vuelve a correr la integración
+        working-directory: ./frontend
+
+      - name: Publicar reporte e2e
+        uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-e2e
+          path: frontend/playwright-report
+          retention-days: 7
+
   deploy-prod:
     runs-on: ubuntu-latest
-    needs: deploy-qa                           # PROD solo después de QA vivo y verificado
+    needs: e2e                                 # EL gate: sin e2e verde ni siquiera se pide aprobación
     environment: production                    # el workflow SE PAUSA acá hasta que un reviewer apruebe
     # Dos deploys a PROD no deben pisarse. OJO: esto NO ordena la cola de aprobaciones: un job
     # esperando aprobación no está "en cola", está en otro estado. Si hay dos corridas esperando,
