@@ -188,10 +188,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
 
                     {/* Nombre */}
                     <div>
-                        <label className="block text-sm font-medium text-white mb-2">
+                        <label htmlFor="checkout-nombre" className="block text-sm font-medium text-white mb-2">
                             Nombre completo *
                         </label>
-                        <input
+                        <input id="checkout-nombre"
                             type="text"
                             name="nombre"
                             value={formData.nombre}
@@ -204,10 +204,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
 
                     {/* Teléfono */}
                     <div>
-                        <label className="block text-sm font-medium text-white mb-2">
+                        <label htmlFor="checkout-telefono" className="block text-sm font-medium text-white mb-2">
                             Teléfono *
                         </label>
-                        <input
+                        <input id="checkout-telefono"
                             type="tel"
                             name="telefono"
                             value={formData.telefono}
@@ -221,10 +221,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
 
                     {/* Email */}
                     <div>
-                        <label className="block text-sm font-medium text-white mb-2">
+                        <label htmlFor="checkout-email" className="block text-sm font-medium text-white mb-2">
                             Email *
                         </label>
-                        <input
+                        <input id="checkout-email"
                             type="email"
                             name="email"
                             value={formData.email}
@@ -237,10 +237,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
 
                     {/* Método de Entrega */}
                     <div>
-                        <label className="block text-sm font-medium text-white mb-2">
+                        <label htmlFor="checkout-metodo_entrega" className="block text-sm font-medium text-white mb-2">
                             Método de entrega *
                         </label>
-                        <select
+                        <select id="checkout-metodo_entrega"
                             name="metodo_entrega"
                             value={formData.metodo_entrega}
                             onChange={handleChange}
@@ -259,10 +259,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
                         <div className="space-y-5 animate-fadeIn">
                             {/* Dirección */}
                             <div>
-                                <label className="block text-sm font-medium text-white mb-2">
+                                <label htmlFor="checkout-direccion" className="block text-sm font-medium text-white mb-2">
                                     Dirección de envío *
                                 </label>
-                                <input
+                                <input id="checkout-direccion"
                                     type="text"
                                     name="direccion"
                                     value={formData.direccion}
@@ -276,10 +276,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
                             {/* Provincia y Ciudad */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-white mb-2">
+                                    <label htmlFor="checkout-provincia" className="block text-sm font-medium text-white mb-2">
                                         Provincia *
                                     </label>
-                                    <select
+                                    <select id="checkout-provincia"
                                         name="provincia"
                                         value={formData.provincia}
                                         onChange={handleChange}
@@ -293,10 +293,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
                                     {errors.provincia && <p className="error-message">{errors.provincia}</p>}
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-white mb-2">
+                                    <label htmlFor="checkout-ciudad" className="block text-sm font-medium text-white mb-2">
                                         Ciudad *
                                     </label>
-                                    <input
+                                    <input id="checkout-ciudad"
                                         type="text"
                                         name="ciudad"
                                         value={formData.ciudad}
@@ -310,10 +310,10 @@ export default function CheckoutForm({ cart, cartForCheckout, total, onClose, on
 
                             {/* Código Postal */}
                             <div>
-                                <label className="block text-sm font-medium text-white mb-2">
+                                <label htmlFor="checkout-codigo_postal" className="block text-sm font-medium text-white mb-2">
                                     Código Postal *
                                 </label>
-                                <input
+                                <input id="checkout-codigo_postal"
                                     type="text"
                                     name="codigo_postal"
                                     value={formData.codigo_postal}

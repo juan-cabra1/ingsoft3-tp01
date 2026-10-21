@@ -508,12 +508,12 @@ export default function AdminPanel() {
                         )}
                         <form onSubmit={handleLogin} className="space-y-5">
                             <div>
-                                <label className="block text-sm font-medium mb-2">Usuario</label>
-                                <input type="text" value={credentials.username} onChange={(e) => setCredentials((p) => ({ ...p, username: e.target.value }))} className="input" placeholder="admin" required />
+                                <label htmlFor="admin-usuario" className="block text-sm font-medium mb-2">Usuario</label>
+                                <input id="admin-usuario" type="text" value={credentials.username} onChange={(e) => setCredentials((p) => ({ ...p, username: e.target.value }))} className="input" placeholder="admin" required />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-2">Contraseña</label>
-                                <input type="password" value={credentials.password} onChange={(e) => setCredentials((p) => ({ ...p, password: e.target.value }))} className="input" placeholder="••••••••" required />
+                                <label htmlFor="admin-password" className="block text-sm font-medium mb-2">Contraseña</label>
+                                <input id="admin-password" type="password" value={credentials.password} onChange={(e) => setCredentials((p) => ({ ...p, password: e.target.value }))} className="input" placeholder="••••••••" required />
                             </div>
                             <button type="submit" disabled={loading} className="btn-primary w-full py-3">
                                 {loading ? 'Verificando...' : 'Ingresar'}
@@ -613,17 +613,17 @@ export default function AdminPanel() {
 
                                     <form onSubmit={handleProductSubmit} className="p-6 space-y-5">
                                         <div>
-                                            <label className="block text-sm font-medium mb-2">Nombre *</label>
-                                            <input type="text" name="nombre" value={productFormData.nombre} onChange={(e) => setProductFormData((p) => ({ ...p, nombre: e.target.value }))} className="input" required />
+                                            <label htmlFor="admin-producto-nombre" className="block text-sm font-medium mb-2">Nombre *</label>
+                                            <input id="admin-producto-nombre" type="text" name="nombre" value={productFormData.nombre} onChange={(e) => setProductFormData((p) => ({ ...p, nombre: e.target.value }))} className="input" required />
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-sm font-medium mb-2">Precio *</label>
-                                                <input type="number" step="0.01" name="precio" value={productFormData.precio} onChange={(e) => setProductFormData((p) => ({ ...p, precio: e.target.value }))} className="input" required />
+                                                <label htmlFor="admin-producto-precio" className="block text-sm font-medium mb-2">Precio *</label>
+                                                <input id="admin-producto-precio" type="number" step="0.01" name="precio" value={productFormData.precio} onChange={(e) => setProductFormData((p) => ({ ...p, precio: e.target.value }))} className="input" required />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium mb-2">Stock *</label>
-                                                <input type="number" name="stock" value={productFormData.stock} onChange={(e) => setProductFormData((p) => ({ ...p, stock: e.target.value }))} className="input" required />
+                                                <label htmlFor="admin-producto-stock" className="block text-sm font-medium mb-2">Stock *</label>
+                                                <input id="admin-producto-stock" type="number" name="stock" value={productFormData.stock} onChange={(e) => setProductFormData((p) => ({ ...p, stock: e.target.value }))} className="input" required />
                                             </div>
                                         </div>
 
