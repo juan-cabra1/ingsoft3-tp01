@@ -88,6 +88,7 @@ export default function CartDrawer({
 
                                     <button
                                         onClick={() => onRemove(item.id)}
+                                        aria-label={`Quitar ${item.nombre} del carrito`}
                                         className="p-2 text-[#a0a0a0] hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors self-start"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
