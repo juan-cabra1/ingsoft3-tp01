@@ -221,7 +221,7 @@ export default function AdminPanel() {
         setLoading(true);
         setError(null);
         const productData = {
-            name: productFormData.nombre,
+            nombre: productFormData.nombre,
             precio: parseFloat(productFormData.precio),
             stock: parseInt(productFormData.stock),
             imagen_url: productFormData.imagenes.length > 0 ? productFormData.imagenes[0] : (productFormData.imagen_url || null),
