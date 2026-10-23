@@ -147,3 +147,113 @@ total: ${total:.2f}"""
             "total": total,
             "whatsapp_url": whatsapp_url,
         }
+
+    @staticmethod
+    def calcular_tiempo_estimado_entrega(
+        provincia: str, metodo_entrega: str, stock_disponible: int
+    ) -> int:
+        """
+        Estima dias habiles de entrega segun destino, metodo y stock.
+        Devuelve 0 para retiro en punto de venta, -1 si no hay stock.
+        (Tiene varios caminos adentro y -a proposito- ni un solo test.)
+        """
+        if metodo_entrega == "Punto de venta":
+            return 0
+
+        if stock_disponible <= 0:
+            return -1
+
+        if provincia in ("CABA", "Buenos Aires"):
+            base = 2
+        elif provincia in ("Córdoba", "Santa Fe", "Mendoza"):
+            base = 4
+        else:
+            base = 7
+
+        if stock_disponible < 3:
+            base += 2
+        elif stock_disponible < 10:
+            base += 1
+
+        return base
+
+    @staticmethod
+    def calcular_costo_envio_estimado(
+        provincia: str, metodo_entrega: str, total: float
+    ) -> float:
+        """
+        Calcula el costo de envio estimado segun destino y monto de compra.
+        Retiro en punto de venta y compras que superan el minimo son gratis.
+        (Idem el metodo de arriba: ni un solo test.)
+        """
+        if metodo_entrega == "Punto de venta":
+            return 0.0
+
+        if total >= 50000:
+            return 0.0
+
+        if provincia in ("CABA", "Buenos Aires"):
+            costo_base = 1500.0
+        elif provincia in ("Córdoba", "Santa Fe", "Mendoza"):
+            costo_base = 2500.0
+        else:
+            costo_base = 4000.0
+
+        if total < 5000:
+            return costo_base * 1.5
+        if total < 15000:
+            return costo_base * 1.2
+
+        return costo_base
+
+    @staticmethod
+    def clasificar_urgencia_pedido(dias_estimados: int, cantidad_items: int) -> str:
+        """
+        Clasifica un pedido segun cuanto va a tardar y cuantos items tiene,
+        para priorizar la cola de preparacion. (Tampoco tiene tests.)
+        """
+        if dias_estimados < 0:
+            return "sin-stock"
+        if dias_estimados == 0:
+            return "retiro-inmediato"
+        if cantidad_items >= 10 and dias_estimados <= 2:
+            return "critico"
+        if dias_estimados <= 2:
+            return "prioritario"
+        if dias_estimados <= 5:
+            return "moderado"
+        if dias_estimados <= 10:
+            return "normal"
+        return "sin-apuro"
+
+    @staticmethod
+    def sugerir_metodo_pago(total: float, es_cliente_frecuente: bool, metodo_entrega: str) -> list[str]:
+        """
+        Sugiere los metodos de pago disponibles segun el monto, si el
+        cliente es frecuente y como retira. (Tampoco tiene tests.)
+        """
+        metodos: list[str] = []
+
+        if total <= 0:
+            return metodos
+
+        metodos.append("efectivo")
+
+        if total >= 5000:
+            metodos.append("transferencia")
+
+        if metodo_entrega == "Punto de venta":
+            metodos.append("tarjeta_debito")
+            if total >= 10000:
+                metodos.append("tarjeta_credito")
+
+        if es_cliente_frecuente:
+            if total >= 20000:
+                metodos.append("cuenta_corriente")
+            else:
+                metodos.append("descuento_fidelidad")
+
+        if total >= 100000:
+            metodos.append("financiacion_bancaria")
+
+        return metodos
