@@ -38,7 +38,7 @@ if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.ENVIRONMENT,
-        traces_sample_rate=0.1,
+        traces_sample_rate=1.0,  # small app, free quota is enough: measure every request
         profiles_sample_rate=0.1,
     )
 
