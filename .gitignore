@@ -18,3 +18,9 @@ Thumbs.db
 # Playwright
 playwright-report/
 test-results/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
