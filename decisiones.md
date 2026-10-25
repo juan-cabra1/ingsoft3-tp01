@@ -306,3 +306,143 @@ Mergeo un PR a `main`. El workflow arranca: construyen y testean `build-backend`
 Usé Claude Code (CLI) como asistente durante todo el TP. **Lo que escribió la IA** y yo revisé: los jobs `deploy-qa` y `deploy-prod` del `ci.yml`, el cambio del build/publicación de imágenes, `scripts/smoke.sh`, la plantilla de nginx, el cambio de MySQL a Postgres (`database.py`, `utils/database_url.py`, los índices en los modelos, el compose) y sus tests, el campo `commit` en `/health` y el `/version` del front. También hizo los PRs, los merges y la release a pedido mío, y armó el script con el que se corrió el rollback. **Lo que decidí yo:** pasar de MySQL a Postgres, usar el proxy de nginx en vez de una configuración en runtime, borrar `db_setup.py`, arrancar de cero sin migrar datos, el texto de los cambios visibles del front («Gorras Anashe», «Nueva Temporada»), qué comentario escribir al rechazar, aprobar y rechazar las corridas de PROD, y hacer públicos los paquetes. **Lo que hice yo en las plataformas:** crear las cuentas y los servicios de Neon y Render, cargar los secrets de los environments, apagar el Auto-Deploy y probar con `SOY PROD` que cada entorno usa su base. El rollback lo ejecuté yo desde mi PowerShell, con un script que armó Claude (pide los deploy hooks con la pantalla oculta, los llama con el commit de `v6.0.0` y cronometra): los hooks los pegué yo, nunca pasaron por la IA.
 
 **Cómo lo verifiqué:** leí los diffs antes de mergear; corrimos los tests y levantamos el stack completo con Docker contra un Postgres real; comprobamos desde afuera qué commit corre en cada entorno (`/health` y `/version`); miré en Render qué commit decía cada deploy; y revisamos en los logs de Actions que el smoke esperara de verdad. Puedo explicar cada compuerta entre el merge y PROD (§12), cada secret (§4) y por qué el smoke de la primera versión daba verde sin probar nada (§8).
+
+# TP7 - Contenedores en el pipeline + pruebas de integración y e2e
+
+## Enlaces del TP7
+
+- **Paquetes públicos** (los dos etiquetados con el commit de la release `v7.0.0`, que es el commit que contiene este mismo documento y que se obtiene con `git rev-list -n1 v7.0.0`; bajan sin credenciales):
+  - Backend: https://github.com/juan-cabra1/ingsoft3-tp01/pkgs/container/ingsoft3-tp01-backend
+  - Frontend: https://github.com/juan-cabra1/ingsoft3-tp01/pkgs/container/ingsoft3-tp01-frontend
+  - `docker pull --platform linux/amd64 ghcr.io/juan-cabra1/ingsoft3-tp01-backend:sha-$(git rev-list -n1 v7.0.0)`
+  - `docker pull --platform linux/amd64 ghcr.io/juan-cabra1/ingsoft3-tp01-frontend:sha-$(git rev-list -n1 v7.0.0)`
+- **Primer deploy por imagen** (PR #38; en el log del job `deploy-qa` se ven los dos `imgURL` con el `sha-` del commit y el smoke esperando ese commit): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39523356172
+- **Integración VERDE y e2e ROJA frenando la promoción:**
+  - El commit que rompió la app (cambié `nombre` por `name` en el formulario de alta de productos del admin; PR #40 https://github.com/juan-cabra1/ingsoft3-tp01/pull/40): https://github.com/juan-cabra1/ingsoft3-tp01/commit/d0f50065be214395f246a8dc38aac64f7edb7695
+  - La corrida (smoke verde, integración verde, e2e roja, `deploy-prod` sin arrancar): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312
+  - Reporte de integración (verde): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312/artifacts/12360098563
+  - Reporte e2e (rojo, con screenshot y traza): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312/artifacts/12360293716
+- **Corrida completa en verde hasta PROD** (la del arreglo, PR #41 https://github.com/juan-cabra1/ingsoft3-tp01/pull/41; la aprobé y PROD quedó en `7595c926a8e41a054657af2b0dedf69b4813829f`, antes de mover el tag: ver sección 3): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39648575886
+- **Entornos vivos:**
+  - QA: front https://bako-front-qa.onrender.com · api https://bako-api-qa.onrender.com/health
+  - PROD: front https://bako-front-prod.onrender.com · api https://bako-api-prod.onrender.com/health
+- **Release:** https://github.com/juan-cabra1/ingsoft3-tp01/releases/tag/v7.0.0
+
+## 1. Build once, deploy many: qué problema del TP6 resuelve
+
+En el TP6 mi pipeline construía y publicaba la imagen en ghcr.io, pero Render no la usaba: en cada deploy volvía a construir el mismo commit desde el repositorio. Entonces lo que corría en QA y en PROD no era lo que mis tests habían aprobado, sino otra construcción del mismo código. Un ejemplo propio: mi `requirements.txt` no tiene versiones fijadas (`fastapi`, `sqlalchemy`, … ), así que dos construcciones del mismo commit podían instalar versiones distintas y yo no tenía cómo enterarme. A mí no me pasó que PROD se rompiera por eso, pero tampoco podía demostrar que no podía pasar.
+
+Ahora la imagen se construye una sola vez, en el job de build, y QA y PROD ejecutan esa misma imagen. El hook de Render recibe qué imagen ejecutar con `imgURL=ghcr.io/juan-cabra1/ingsoft3-tp01-backend:sha-<commit>` (y lo mismo con el frontend). `deploy-prod` manda exactamente el mismo `sha-<commit>` que `deploy-qa`: en el log de la corrida se leen los dos `imgURL` iguales. Lo que se verifica en QA es lo que se promueve.
+
+Para que eso fuera posible no creé servicios nuevos: a los cuatro servicios de Render les cambié la fuente a *Existing Image* (Settings → Source). Así conservé las URLs, las variables de entorno y los deploy hooks, y no hubo servicios viejos que borrar. Antes de tocar nada comprobé con `docker pull` (sin sesión iniciada) que las dos imágenes del último merge existían y eran públicas, y cambié primero **un solo** servicio, `bako-api-qa`, que probé a mano con el hook antes de seguir con los otros tres y de tocar el pipeline.
+
+## 2. Mi estrategia de etiquetas
+
+- **`sha-<commit>` en el registry:** cada merge a `main` publica las dos imágenes con una sola etiqueta, la del commit completo (40 caracteres). Dice de qué commit salió esa imagen, y es la que usa la promoción: QA y PROD reciben el mismo `sha-…`.
+- **Por qué mi pipeline no publica `latest`:** `latest` es un puntero, no una versión: hoy apunta a una imagen y mañana a otra. Si desplegara `latest`, después no podría decir qué desplegué, y la promoción de «lo mismo que verificó QA» no se podría demostrar. Con una sola etiqueta por imagen, la de su commit, no hay forma de desplegar algo sin decir exactamente qué es.
+- **`v7.0.0` en git:** le pone nombre a una versión que sé que anduvo en PROD. Apunta al commit que está en PROD (sección 3), y de ahí llego a la imagen.
+- **Qué no garantiza cada una:** una etiqueta `sha-…` se puede volver a publicar (por ejemplo si vuelvo a correr la corrida de ese commit) y el contenido podría ya no ser el mismo. Lo único que nadie puede mover es el digest (`imagen@sha256:…`). Hoy promuevo por etiqueta, que es la convención de la materia, y el hook de Render acepta también el digest; usarlo sería el paso siguiente.
+- **Con qué imagen configuré los servicios de Render, y por qué no es la que corre:** los cuatro servicios quedaron configurados con la imagen del merge `68b4b2525e8af1e94302cf7b72dd59474befb35e`, porque Render pide la dirección de una imagen para aceptar el cambio de fuente y esa ya la había comprobado con el `pull`. Pero lo que corre no es esa: lo que corre lo decide cada deploy del pipeline con su `imgURL`, y Render solo exige que coincidan el registry y el nombre de la imagen; la etiqueta puede ser otra. Después de cambiar la fuente no volví a tocar esa configuración: lo que corre en cada momento lo muestra `/health` de la api, que contesta el commit del último deploy y no el de la imagen que dejé en *Settings*.
+- **Lo que me costó entender:** al principio pensaba que el `sha` que pegué en Render era «el» sha del servicio y que había que actualizarlo en cada merge. Lo que quedó claro es que cada commit tiene su propia imagen, como una caja distinta con su rótulo, y que lo que pegué en Render es solo el punto de partida: cada deploy le dice a Render qué caja ejecutar.
+
+## 3. De la release a la imagen en un paso
+
+`git rev-list -n1 v7.0.0` devuelve el commit de la release, y la etiqueta `sha-<ese commit>` está en mis dos paquetes (`-backend` y `-frontend`): ahí está el binario exacto de esa versión. Volver a ella sería mandarle esa imagen al hook, el mismo mecanismo del deploy; en este TP no lo practiqué porque el rollback ya lo medí en el TP6.
+
+El tag va sobre el commit que está en PROD y no sobre el último de `main`, porque entre mi última aprobación y el momento de etiquetar podría haber entrado otro merge que rechacé o que todavía espera aprobación; etiquetar ese nombraría una versión que nunca corrió en PROD. Por eso el commit lo saqué de *Deployments* (`gh api 'repos/{owner}/{repo}/deployments?environment=production'`) y creé el tag con `--verify-tag`. Lo hice en dos pasos y quiero dejarlo escrito. Primero etiqueté `7595c926a8e41a054657af2b0dedf69b4813829f`, el commit de PROD con el último arreglo. Después me di cuenta de que ese tag no incluía este `decisiones.md`, que es parte de la entrega y que quien corrige ve navegando el tag. Entonces mergeé el PR que agrega esta sección, aprobé el `deploy-prod` de esa corrida (el código es el mismo que el de `7595c92`, pero PROD pasa a correr la imagen de ese commit, que el pipeline publicó con su propia etiqueta `sha-…`) y moví `v7.0.0` y la release a ese commit, que de nuevo es el que figura en *Deployments*. Como un documento no puede contener el sha de su propio commit, acá no lo escribo: se obtiene con `git rev-list -n1 v7.0.0`. Lo que me costó: reescribí un tag que ya había publicado, algo que normalmente no se hace; lo hice porque era recién publicado y todavía no lo había usado nadie.
+
+## 4. Cómo compruebo desde afuera que un entorno ejecuta mi imagen, y qué no prueba el smoke
+
+Esta parte la vi pasar en vivo. Después de cambiarle la fuente a `bako-api-qa` y dispararle el hook a mano con el `imgURL`, miré `/health` y contestaba `"commit":"unknown"`. Antes contestaba `68b4b25…`. La razón: ese commit lo ponía Render con la variable `RENDER_GIT_COMMIT` porque construía desde el repo; con una imagen ya hecha Render no construye nada, no conoce el commit y esa variable ya no existe. Mi `scripts/smoke.sh` del TP6 compara ese commit con el de la corrida, así que habría quedado en rojo para siempre.
+
+Tenía dos caminos: aflojar el smoke a «¿responde?», o hornear el commit dentro de la imagen. Elegí lo segundo, porque aflojarlo era perder lo que había construido en el TP6 (un smoke que espera a que el entorno corra *ese* commit y no da verde contra la versión vieja). Lo que hice: los dos Dockerfiles reciben un `ARG COMMIT_SHA` que queda como variable de entorno dentro de la imagen, y los pasos del pipeline que publican le pasan `COMMIT_SHA=${{ github.sha }}`. La api lo informa en `/health` y el front en `/version`. La guía deja esto como concepto y no lo pide; lo implementé porque sin eso mi smoke dejaba de servir. Lo comprobé antes de mergear: construí las imágenes con un commit inventado y sin el argumento, y con el argumento informan ese commit y sin él informan `unknown`.
+
+Hoy se comprueba así, sin entrar a ningún panel:
+- `curl https://bako-api-prod.onrender.com/health` → el campo `commit`.
+- `curl https://bako-front-prod.onrender.com/version` → el commit del front.
+- En la primera corrida real (https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39523356172) el smoke vio la imagen vieja (`api=unknown`) en el intento 1 y recién dio verde cuando los dos servicios informaron el commit nuevo.
+- Lo único que no se puede linkear son los *Events* de Render: ahí cada deploy dice «Triggered via Deploy Hook» y nombra el `sha-` de la corrida. Eso lo muestro en vivo en la defensa.
+
+**Lo que el smoke no prueba:** que la app *funcione*. Solo pregunta si el entorno responde y corre el commit esperado. La corrida roja lo muestra: el smoke dio verde («QA corre d0f5006») con el alta de productos rota. Eso lo ve la e2e. Tampoco prueba que los bytes de la imagen sean los que se verificaron: si alguien re-publicara la etiqueta `sha-…` con otro contenido, el smoke seguiría viendo el mismo commit; eso solo lo cerraría el digest.
+
+## 5. Cómo logré que la misma imagen del front sirva en QA y en PROD
+
+Por variable de entorno, en tiempo de ejecución: el front recibe `BACKEND_URL` (la api de **su** entorno) y `DNS_RESOLVER`, y nginx las lee al arrancar desde una plantilla; la api recibe `DATABASE_URL`, `JWT_SECRET_KEY`, `WHATSAPP_NUMBER` y `ADMIN_DEFAULT_PASSWORD`. Dentro de la imagen quedó el código, las dependencias, los valores por defecto de desarrollo (para que `docker compose up` siga andando) y, desde este TP, el commit del que sale (`COMMIT_SHA`). Ese commit es por imagen y no por entorno: para un mismo `sha-…` es igual en QA y en PROD, que es justamente lo que quiero. Lo que distingue a los dos entornos son solo las variables. La separación de las bases ya la había comprobado en el TP6.
+
+## 6. Qué pruebas elegí para integración y e2e, y qué dejé afuera
+
+**Integración** (`frontend/e2e/api.spec.js`, 3 pruebas, sin navegador y sin dobles, contra la api de QA con su base de verdad):
+1. Alta, verificación y borrado: me logueo como admin, creo un producto con un nombre único, lo busco en `GET /products`, lo borro y compruebo que ya no está.
+2. Un precio inválido (`"abc"`) lo rechaza la api con `422` y no se crea nada.
+3. El checkout rechaza pedir más unidades que el stock (`400`, «Stock insuficiente») y el stock del producto queda igual.
+
+La tercera la elegí por la regla de negocio que protege: es la que evita venderle a alguien una gorra que no existe. Si se rompe, el que me escribe es un cliente. Todas las que crean datos usan un nombre con la hora adentro y borran lo que crearon; la del precio inválido no crea nada, y lo que comprueba es justamente eso.
+
+**e2e** (`frontend/e2e/tienda.spec.js`, 3 flujos con navegador real, contra el front de QA):
+1. Crear un producto desde el panel de admin, verlo en la tabla y borrarlo (con la confirmación del `confirm()` incluida).
+2. Entrar al panel con una clave incorrecta: el usuario ve «Credenciales incorrectas» y no llega al panel. Pasa por front, nginx, api y base.
+3. Agregar una gorra al carrito y quitarla: es lo que hace un cliente todos los días.
+
+El flujo de error lo hice con el login y no con el checkout inválido porque el checkout valida todo del lado del cliente, sin llamar a la api: ese test habría probado solo el front. Con el login el error viaja por todo el sistema.
+
+**Qué no puse, y por qué (pirámide):**
+- En **e2e** no puse el checkout completo (termina en un link de WhatsApp, que es externo), ni la subida de imágenes, ni reordenar con drag and drop, ni el CRUD de drops y subcategorías. Son caros de sostener y los puedo cubrir más abajo. Tampoco repito ahí las validaciones del formulario del checkout, que son reglas del front.
+- En **integración** no puse los endpoints de drops, ni el límite de intentos del login (5 por minuto): la suite comparte ese límite con el e2e y probarlo la volvería frágil.
+- Los **unitarios** del TP5 siguen cubriendo las reglas aisladas, y solo `src/lib` y `src/services` del front.
+
+**Qué clase de bug mi gate no ataja:** todo lo que ninguno de esos 6 recorridos toca (la subida de imágenes, los drops, el checkout hasta WhatsApp); lo que solo pasa con la configuración de PROD (una variable mal cargada en `bako-api-prod`, que ni la integración ni la e2e ven porque corren contra QA); y lo visual o de responsive, que ningún `expect` mira.
+
+## 7. Integración y e2e: qué prueba cada una y por qué no es lo mismo
+
+La integración le habla a la api directo: ve si la api y su base se entienden (qué acepta, qué rechaza, qué guarda). No sabe si la pantalla usa ese endpoint. La e2e maneja un navegador y ve la pantalla, pero cuando se pone roja no dice **quién** se rompió. Juntas dan un diagnóstico.
+
+Lo viví con mi corrida roja (https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312). Cambié en el formulario del admin `nombre:` por `name:`, en una sola línea de `AdminPanel.jsx`, sin tocar `e2e/`:
+- Los 36 tests unitarios dieron verde: ninguno afirma ese campo, porque el payload se arma dentro del componente.
+- El smoke dio verde («QA corre d0f5006»): el sistema respondía.
+- La **integración dio verde**: le habla a la api con `nombre`, y la api y la base guardan y borran sin problema.
+- La **e2e dio roja**: el flujo de crear un producto falló los dos intentos, mientras los otros dos flujos pasaron.
+- `deploy-prod` quedó salteado, nunca pidió aprobación, y PROD siguió en el commit anterior.
+
+Lo diagnostiqué con los reportes y no leyendo el código: en la traza de la e2e, pestaña *Network*, el navegador hizo `POST /api/admin/products` y la api contestó `422` con `missing → body → nombre`. Como la integración estaba verde, la api y la base estaban sanas: el que no usa bien la api es el front. Es la primera fila de la tabla de la guía (integración verde, e2e roja).
+
+Si en cambio hubiera roto la api, la integración se habría puesto roja y la e2e no habría corrido (su `needs` no se cumple). Eso no lo probé: lo explico por cómo está armada la cadena.
+
+## 8. Por qué mi integración es la amplia y no la estrecha
+
+Mi integración le habla a la api **ya desplegada** en QA. La estrecha sería levantar mi api dentro del pipeline con una base descartable (por ejemplo un Postgres como `services:` del job) y probar ahí, sin desplegar nada.
+
+- **Qué gano con la amplia:** muchísima menos configuración, porque QA ya existe y corre la imagen exacta de la corrida; y prueba además que el despliegue quedó bien: la base real de Neon, las variables, el driver de Postgres, el contenedor de verdad.
+- **Qué pierdo:** no corre antes del deploy, así que código malo sí puede llegar a QA (me lo pregunté yo mismo mirando el pipeline). No es un problema del diseño: QA existe para eso, y lo que se protege es PROD, donde el gate frena. También pierdo aislamiento: QA es uno solo y lo comparten todas las corridas, así que depende de que nadie más lo use, y depende de Render y del cold start.
+
+Con la estrecha, el código roto ni siquiera llegaría a QA, pero armarla costaba bastante más que el resto del práctico. Para el tamaño de mi app, la amplia me daba el mismo concepto con una fracción del trabajo.
+
+## 9. Cold start del free tier, y qué es un test flaky
+
+QA duerme y despierta lento. Lo manejo en dos lugares: el smoke de `deploy-qa` ya despierta y espera a los servicios (30 intentos cada 20 s), así que cuando arrancan las pruebas QA ya está vivo; y la configuración de Playwright tiene tiempos largos (60 s por test, 15 s por aserción) y **un** reintento (`retries: 1`). No uso `sleep` ni salteo tests si el entorno no responde: el cold start se resuelve con tiempos de espera.
+
+Un test **flaky** es el que a veces pasa y a veces falla con el mismo código. Es peor que no tener test porque entrena al equipo a ignorar el rojo: después, cuando falla de verdad, nadie le cree. Con el reintento, un test que pasa recién en el segundo intento aparece en el reporte como *flaky* aunque la corrida salga en verde, y por eso hay que abrir el reporte igual. En mis corridas en CI no apareció ninguno: las dos suites pasaron limpias (la integración en ~7 s y la e2e en ~12 s), y el test que falló en la corrida roja falló los dos intentos, o sea que fue un fallo real y no una demora.
+
+## 10. Límite conocido de mi cadena: QA es uno solo
+
+QA es un único entorno y lo comparten todas las corridas. Si hago dos merges seguidos, la corrida B puede redesplegar QA mientras la integración o la e2e de la corrida A todavía lo están usando: QA cambia de imagen con las pruebas de A a medio correr.
+
+- **Qué vería:** un rojo en la integración o en la e2e de A que no es de mi código, o algo peor porque no avisa: un verde que en parte probó la imagen de B.
+- **Cómo lo reconocería:** en *Events* del servicio de QA miro qué imagen está corriendo; si es la de B, miro en *Actions* a qué hora corrió el `deploy-qa` de B. Si fue mientras corría la e2e de A, esa e2e no vale. Y si dudo de un rojo, desempata la e2e de B.
+- **Qué haría:** rechazar la corrida A con el motivo escrito (rechazarla es cosa mía, no la hace el `concurrency`: ese mecanismo cancela lo que está en cola, y un job esperando mi aprobación no está en cola), y no re-correr sus jobs de pruebas, porque probarían la imagen de B. La que vale es la B.
+- **Cómo me cuido hoy:** un merge por vez. Antes de mergear miro *Actions* y espero a que la corrida anterior termine `integracion` y `e2e`. En este TP lo hice así en todos los merges.
+- **Cómo lo resolvería un equipo real:** con un entorno por corrida, que nace con ella y se destruye al terminar. Queda fuera de este práctico.
+
+## 11. Problemas que tuve y cómo los resolví
+
+- **Cargué mal la clave del admin en el secret.** Las pruebas de integración y la e2e de creación necesitan loguearse como admin en QA, y la clave la leen de un secret del environment `qa` (`ADMIN_PASSWORD`). Al cargarlo me di cuenta de que me había equivocado. Lo resolví volviendo a correr el mismo `gh secret set ADMIN_PASSWORD --env qa`, que pisa el valor anterior, y comprobé con `gh secret list --env qa` que quedara con la fecha nueva (solo muestra el nombre, nunca el valor). Lo arreglé antes de mergear; si hubiera quedado mal, el login habría dado `401` y la integración se habría puesto roja por una razón que no es de la app.
+- **Pensé que el `sha` de Render había que actualizarlo en cada merge.** Al cambiar la fuente de los servicios a *Existing Image* pegué la imagen de un merge, y me pregunté si eso era «la» imagen del servicio. Pedí que me lo explicara de nuevo hasta entenderlo: ese `sha` es solo el punto de partida que Render exige, y lo que corre lo decide cada deploy con el `imgURL`. Lo comprobé mirando `/health`, que contesta el commit del último deploy y no el que quedó en *Settings*.
+- **Me pregunté si las pruebas de integración y e2e no debían correr antes de `deploy-qa`,** porque así código malo podía llegar a QA. Lo resolví entendiendo para qué sirven: las dos le hablan a algo que tiene que estar corriendo, por eso van después del deploy, y QA existe justamente para que ahí se frene lo que se rompe y no llegue a PROD. La alternativa que sí corre antes del deploy es la integración estrecha, que explico en la sección 8.
+
+## 12. Declaración de uso de IA
+
+Usé Claude (Claude Code) durante todo el TP. Qué hizo la IA y qué hice yo:
+
+- **La IA escribió:** los cambios de los Dockerfiles y del `ci.yml` (el `build-arg` del commit, el `imgURL` en los hooks, los jobs `integracion` y `e2e` y el encadenado de `needs`), los dos archivos de Playwright (`api.spec.js` y `tienda.spec.js`) y su configuración, los `htmlFor`/`id` y el `aria-label` que hacían falta para encontrar los campos, y el borrador de este documento. La tercera prueba de integración y el tercer flujo e2e los propuso la IA y yo los acepté.
+- **Lo decidí yo:** hornear el commit dentro de la imagen en vez de aflojar el smoke; hacer el flujo de error con el login admin y no con el checkout; qué línea romper para la evidencia (`nombre` por `name` en el formulario del admin); aprobar cada corrida a PROD; y publicar la release. También hice a mano lo que usa secretos: cambié la fuente de los cuatro servicios en Render, disparé el primer hook con `imgURL` y cargué el secret.
+- **Cómo lo verifiqué:** corrí las 6 pruebas contra mi compose local antes de subirlas; después miré en *Actions* que las dos suites pasaran en CI contra QA; en la corrida roja bajé los dos reportes y vi en la traza el `422`; y comprobé desde afuera, con `curl` a `/health` y `/version`, que QA y PROD corrieran el commit esperado, además de *Deployments* y *Events* de Render.
+- **Un error de la IA que se corrigió durante el trabajo:** había afirmado que el checkout dejaba órdenes sin forma de borrarlas, y al mirar el código se vio que no guarda nada en la base (genera el pedido y el link de WhatsApp). Por eso las pruebas de escritura usan el alta de productos del admin y no el checkout.
