@@ -62,7 +62,7 @@ jobs:
           PY
 
       - name: Publicar coverage y resultados del backend
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: coverage-backend
@@ -135,7 +135,7 @@ jobs:
           " >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publicar el coverage del frontend
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: coverage-frontend
@@ -225,7 +225,7 @@ jobs:
         working-directory: ./frontend
 
       - name: Publicar reporte de integración
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}                # el reporte importa MÁS cuando falla
         with:
           name: playwright-report-integracion  # distinto del de e2e: dos iguales rompen la corrida
@@ -263,7 +263,7 @@ jobs:
         working-directory: ./frontend
 
       - name: Publicar reporte e2e
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-report-e2e
