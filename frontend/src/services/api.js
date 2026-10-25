@@ -16,11 +16,11 @@ async function tracedFetch(url, options = {}) {
   try {
     const response = await fetch(url, { ...options, headers });
     if (!response.ok) {
-      console.error(`[${requestId}] ${options.method || 'GET'} ${url} → ${response.status}`);
+      console.error('[%s] %s %s → %s', requestId, options.method || 'GET', url, response.status);
     }
     return response;
   } catch (error) {
-    console.error(`[${requestId}] ${options.method || 'GET'} ${url} → NETWORK ERROR:`, error.message);
+    console.error('[%s] %s %s → NETWORK ERROR:', requestId, options.method || 'GET', url, error.message);
     throw error;
   }
 }

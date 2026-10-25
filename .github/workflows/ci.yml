@@ -162,6 +162,8 @@ jobs:
 
   deploy-qa:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [build-backend, build-frontend]     # sin CI verde no hay deploy
     if: github.ref == 'refs/heads/main'        # los PRs verifican; solo main despliega
     environment: qa
@@ -194,6 +196,8 @@ jobs:
 
   integracion:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: deploy-qa                           # QA ya corre la imagen de ESTA corrida
     environment: qa                            # de acá salen las credenciales del admin de QA
     timeout-minutes: 15
@@ -230,6 +234,8 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: integracion                         # si la api está rota, no gastamos un browser en confirmarlo
     environment: qa
     timeout-minutes: 20                        # si algo se cuelga, el job muere en vez de esperar horas
@@ -266,6 +272,8 @@ jobs:
 
   deploy-prod:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: e2e                                 # EL gate: sin e2e verde ni siquiera se pide aprobación
     environment: production                    # el workflow SE PAUSA acá hasta que un reviewer apruebe
     # Dos deploys a PROD no deben pisarse. OJO: esto NO ordena la cola de aprobaciones: un job
