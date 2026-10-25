@@ -440,9 +440,44 @@ QA es un único entorno y lo comparten todas las corridas. Si hago dos merges se
 
 ## 12. Declaración de uso de IA
 
-Usé Claude (Claude Code) durante todo el TP. Qué hizo la IA y qué hice yo:
+Usé Claude (Claude Code) en el TP. Qué hizo la IA y qué hice yo:
 
 - **La IA escribió:** los cambios de los Dockerfiles y del `ci.yml` (el `build-arg` del commit, el `imgURL` en los hooks, los jobs `integracion` y `e2e` y el encadenado de `needs`), los dos archivos de Playwright (`api.spec.js` y `tienda.spec.js`) y su configuración, los `htmlFor`/`id` y el `aria-label` que hacían falta para encontrar los campos, y el borrador de este documento. La tercera prueba de integración y el tercer flujo e2e los propuso la IA y yo los acepté.
 - **Lo decidí yo:** hornear el commit dentro de la imagen en vez de aflojar el smoke; hacer el flujo de error con el login admin y no con el checkout; qué línea romper para la evidencia (`nombre` por `name` en el formulario del admin); aprobar cada corrida a PROD; y publicar la release. También hice a mano lo que usa secretos: cambié la fuente de los cuatro servicios en Render, disparé el primer hook con `imgURL` y cargué el secret.
 - **Cómo lo verifiqué:** corrí las 6 pruebas contra mi compose local antes de subirlas; después miré en *Actions* que las dos suites pasaran en CI contra QA; en la corrida roja bajé los dos reportes y vi en la traza el `422`; y comprobé desde afuera, con `curl` a `/health` y `/version`, que QA y PROD corrieran el commit esperado, además de *Deployments* y *Events* de Render.
 - **Un error de la IA que se corrigió durante el trabajo:** había afirmado que el checkout dejaba órdenes sin forma de borrarlas, y al mirar el código se vio que no guarda nada en la base (genera el pedido y el link de WhatsApp). Por eso las pruebas de escritura usan el alta de productos del admin y no el checkout.
+
+# TP8 - Infraestructura como Código
+
+## 1. Qué riel elegí y qué versiones fijé
+
+Elegí el riel de la guía: **Terraform** con el provider de **Neon** y el de **Render**, que son los mismos proveedores que vengo usando desde el TP6. Instalé Terraform 1.16.6 con `winget` (la cátedra midió con 1.15.8 y la guía dice que sirve cualquiera posterior).
+
+Los providers están fijados por versión en `infra/main.tf`: `kislerdm/neon` **0.18.0** y `render-oss/render` **1.9.1**, y el `.terraform.lock.hcl` está commiteado para que también quede fijado el hash. El de Neon tiene un riesgo que quiero dejar anotado: su repositorio está archivado y Neon va a publicar uno oficial con otro nombre (`neondatabase/neon`). Cuando salga, el cambio es el `source`, un `terraform init -upgrade` y leer el plan.
+
+**Qué declaré:** un entorno **nuevo**, `preprod`, que no existía: un proyecto de Neon con su rol y su base, y dos servicios de Render (api y front) que ejecutan la imagen de la release v7.0.0 (`sha-260d343…`). No toqué mi QA ni mi producción. Elegí un entorno nuevo y no pasar a código los que ya tenía porque así la respuesta a «necesito un entorno más» es un archivo y un `apply`, y porque Render no deja modificar un servicio del plan gratuito: por eso preprod solo se **crea** y se **destruye**, nunca se edita.
+
+Cómo quedó el código:
+- Las claves de los providers (`NEON_API_KEY`, `RENDER_API_KEY`, `RENDER_OWNER_ID`) las leen de variables de entorno; no hay ninguna escrita en el HCL.
+- La cadena de conexión de la api (`DATABASE_URL`) se **arma** con lo que devuelve Neon (usuario, contraseña y host directo), y la `BACKEND_URL` del front sale de la URL de su propia api. No copié ninguna de las dos a mano.
+- La clave JWT, la clave del admin y mi número de WhatsApp no están en el repo: van en un `preprod.auto.tfvars` local que está en el `.gitignore`.
+- El estado vive en mi máquina y está ignorado desde antes del primer `apply`, junto con `.terraform/` y los `*.tfvars`.
+- No declaré la variable del commit en el servicio: la imagen ya lo trae horneado desde el TP7, y una variable del servicio la pisaría.
+
+## 2. Problemas que tuve y cómo los resolví
+
+- **Pegué `export` en PowerShell y no lo reconoció.** `export` es de bash. Pasé a Git Bash para cargar las tres claves.
+- **`invalid ownerID` en el primer `apply` de Render.** Había exportado el id que empieza con `usr-` (el de mi usuario), pero mis servicios están en un workspace de tipo equipo. Lo resolví preguntándole a la API de Render qué dueños tenía mi clave (`/v1/owners`): devolvió un solo workspace, con un id `tea-…`. Lo exporté y repetí el `apply`. No había quedado nada creado a medias.
+- **La región de Neon cambió entre dos creaciones.** La primera vez el proyecto nació en `us-east-2` y después de un `destroy` y un `apply` nació en `us-east-1`, porque no había declarado `region_id` y lo elegía el provider. Lo noté comparando el host de los `output`. Lo fijé en el código con `region_id = "aws-us-east-1"`, que es la región de mis proyectos de QA y producción, y el `plan` dio `No changes`.
+- **Mis servicios de preprod aparecieron «sin grupo» en Render.** Mis cuatro servicios de QA y producción están dentro de un proyecto del dashboard y los dos de preprod no, porque Terraform los creó sin ese agrupamiento y yo no lo declaré. No lo resolví: lo dejo anotado como algo que sigue siendo distinto entre lo clickeado y lo escrito.
+
+Algo que pude medir y la guía dejaba abierto: al destruir y volver a crear los servicios con el mismo nombre, Render devolvió **las mismas URLs**, sin sufijo.
+
+## 3. Declaración de uso de IA
+
+Usé Claude (Claude Code) en el TP.
+
+- **La IA escribió:** el HCL de `infra/` (`main.tf`, `variables.tf`, `outputs.tf`), las reglas del `.gitignore` y la forma de armar la `DATABASE_URL` para mi api. También me guió con los comandos y me explicó cómo leer cada plan.
+- **Lo hice yo:** instalé Terraform, creé las claves de Neon y de Render y las cargué en mi terminal, escribí mi `preprod.auto.tfvars` con mis propios valores, y corrí **yo** cada `plan`, `apply` y `destroy` desde mi terminal. También hice los experimentos de drift (borrar una base a mano y crear una intrusa) y el de `prevent_destroy`, y revisé en las consolas de Neon y Render que preprod apareciera y desapareciera.
+- **Cómo lo verifiqué:** leí cada plan antes de aplicar; el segundo `plan` dio `No changes`; comprobé que preprod respondiera como entorno (`/health`, `/products` y el front hablando con su propia api, con el mismo commit que QA y producción); y confirmé desde afuera que QA y producción no se tocaron.
+- **Un error de la IA que se corrigió:** había dicho que mi Neon estaba en `us-east-2`, y lo había deducido del primer host de preprod. Al preguntarte la región real de QA y producción resultó ser `us-east-1`.
