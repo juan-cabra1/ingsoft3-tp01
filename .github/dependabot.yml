@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"              # backend dependencies (requirements.txt)
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"              # frontend dependencies
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"   # the actions used by the pipeline are dependencies too
+    directory: "/"
+    schedule:
+      interval: "weekly"

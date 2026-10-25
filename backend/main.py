@@ -171,7 +171,9 @@ def root():
     return {"message": "Bako Lifestyle Store API", "version": "2.1.0", "docs": "/docs"}
 
 
-@app.get("/health")
+# GET for people and probes; HEAD because free external monitors (UptimeRobot) ask with HEAD,
+# and a GET-only route answers 405 to them while the service is alive.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """Health check with DB connectivity and uptime."""
     db_ok = False
