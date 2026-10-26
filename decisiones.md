@@ -1,3 +1,14 @@
+# Enlaces de los TP6 y TP7 (resumen)
+
+El detalle de cada uno está en su sección más abajo: [Enlaces de este TP](#enlaces-de-este-tp) (TP6) y [Enlaces del TP7](#enlaces-del-tp7).
+
+- **Paquetes públicos:** https://github.com/juan-cabra1/ingsoft3-tp01/pkgs/container/ingsoft3-tp01-backend · https://github.com/juan-cabra1/ingsoft3-tp01/pkgs/container/ingsoft3-tp01-frontend
+- **QA:** front https://bako-front-qa.onrender.com · api https://bako-api-qa.onrender.com/health
+- **PROD:** front https://bako-front-prod.onrender.com · api https://bako-api-prod.onrender.com/health
+- **Releases:** https://github.com/juan-cabra1/ingsoft3-tp01/releases/tag/v6.0.0 · https://github.com/juan-cabra1/ingsoft3-tp01/releases/tag/v7.0.0
+
+---
+
 # Decisiones - TP1
 
 ## 1. Por qué Git no pudo resolver el conflicto solo — y qué habría tenido que pasar para que nunca apareciera.
@@ -322,7 +333,8 @@ Usé Claude Code (CLI) como asistente durante todo el TP. **Lo que escribió la 
   - La corrida (smoke verde, integración verde, e2e roja, `deploy-prod` sin arrancar): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312
   - Reporte de integración (verde): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312/artifacts/12360098563
   - Reporte e2e (rojo, con screenshot y traza): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39634369312/artifacts/12360293716
-- **Corrida completa en verde hasta PROD** (la del arreglo, PR #41 https://github.com/juan-cabra1/ingsoft3-tp01/pull/41; la aprobé y PROD quedó en `7595c926a8e41a054657af2b0dedf69b4813829f`, antes de mover el tag: ver sección 3): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39648575886
+  - Los artefactos de reporte se guardan 7 días en GitHub y vencen el 28/10/2026, así que después de esa fecha esos dos enlaces dan 404; la corrida y su log siguen disponibles en el enlace de arriba, y guardé una copia local de los dos reportes para mostrarlos en la defensa.
+- **Corrida completa en verde hasta PROD** (la del arreglo, PR #41 https://github.com/juan-cabra1/ingsoft3-tp01/pull/41 — la aprobé y PROD quedó en `7595c926a8e41a054657af2b0dedf69b4813829f`, antes de mover el tag: ver sección 3): https://github.com/juan-cabra1/ingsoft3-tp01/actions/runs/39648575886
 - **Entornos vivos:**
   - QA: front https://bako-front-qa.onrender.com · api https://bako-api-qa.onrender.com/health
   - PROD: front https://bako-front-prod.onrender.com · api https://bako-api-prod.onrender.com/health
