@@ -22,7 +22,7 @@
     "react-router-dom": "^7.13.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.1.18",
     "@types/react": "^19.2.5",
